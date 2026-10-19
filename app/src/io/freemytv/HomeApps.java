@@ -325,23 +325,27 @@ final class HomeApps {
         return null;
     }
 
-    /** The TV's antenna (tuner) input, or null. The TV maker's own tuner comes first. */
+    /**
+     * The TV's antenna (tuner) input, or null. The TV maker's hardware tuner comes first: system apps also declare
+     * tuner inputs (TCL: AirPlay), and Android names the hardware ones "…/HW<id>".
+     */
     static String tunerInput(Context c) {
         TvInputManager tim = (TvInputManager) c.getSystemService(Context.TV_INPUT_SERVICE);
         if (tim == null) return null;
-        String fallback = null;
+        String system = null, fallback = null;
         try {
             for (TvInputInfo info : tim.getTvInputList()) {
                 if (info.getType() != TvInputInfo.TYPE_TUNER || info.isPassthroughInput()) continue;
                 if (info.getServiceInfo() != null && info.getServiceInfo().applicationInfo != null
                         && (info.getServiceInfo().applicationInfo.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) {
-                    return info.getId();
+                    if (info.getId().contains("/HW")) return info.getId();
+                    if (system == null) system = info.getId();
                 }
                 if (fallback == null) fallback = info.getId();
             }
         } catch (RuntimeException ignored) {
         }
-        return fallback;
+        return system != null ? system : fallback;
     }
 
     static Intent launchIntent(PackageManager pm, String pkg) {
