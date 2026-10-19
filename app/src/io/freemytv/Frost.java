@@ -3,6 +3,7 @@ package io.freemytv;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Shader;
+import android.os.Build;
 
 /**
  * The frosted glass background: the aurora without detail (the same math as `aurora(uv, 0)` in Shaders) in a 48×27
@@ -26,8 +27,13 @@ final class Frost {
         }
         bitmap.setPixels(pixels, 0, W, 0, 0, W, H);
         BitmapShader shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        shader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
-        return shader;
+        return filter(shader, BitmapShader.FILTER_MODE_LINEAR);
+    }
+
+    /** BitmapShader.setFilterMode is Android 13+; older ones filter through the Paint. */
+    static BitmapShader filter(BitmapShader s, int mode) {
+        if (Build.VERSION.SDK_INT >= 33) s.setFilterMode(mode);
+        return s;
     }
 
     private static int color(float u, float v, float tt, float dim, float[] c, float aspect) {
