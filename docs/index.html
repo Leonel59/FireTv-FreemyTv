@@ -3,11 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    // Brazilians (a Portuguese browser or a Brazilian time zone) get the Portuguese page; the PT/EN switch wins.
+    (function () {
+      var lang;
+      try { lang = localStorage.getItem("lang"); } catch (e) {}
+      if (!lang) {
+        var zone = "";
+        try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+        var brazil = /^(America\/(Sao_Paulo|Rio_Branco|Manaus|Cuiaba|Campo_Grande|Porto_Velho|Boa_Vista|Belem|Fortaleza|Recife|Araguaina|Maceio|Bahia|Santarem|Noronha|Eirunepe)|Brazil\/)/.test(zone);
+        lang = brazil || /^pt\b/i.test(navigator.language || "") ? "pt" : "en";
+      }
+      if (lang === "pt") location.replace("pt/" + location.search + location.hash);
+    })();
+  </script>
   <title>Free My TV — a fast, ad-free home screen for Google TV</title>
   <meta name="description" content="Open-source home screen for Google TV and Android TV. No ads, 60 fps, trending picks from your own apps and a look that follows the sunset. One button to undo.">
   <link rel="canonical" href="https://freemytv.io/">
+  <link rel="alternate" hreflang="en" href="https://freemytv.io/">
+  <link rel="alternate" hreflang="pt-BR" href="https://freemytv.io/pt/">
+  <link rel="alternate" hreflang="x-default" href="https://freemytv.io/">
   <meta name="theme-color" content="#F5F5F7">
   <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="pt_BR">
   <meta property="og:url" content="https://freemytv.io/">
   <meta property="og:title" content="Free My TV">
   <meta property="og:description" content="A fast, ad-free home screen for Google TV. Open source. One button to undo.">
@@ -37,10 +56,13 @@
       <a href="#install">Install</a>
       <a href="#faq">FAQ</a>
     </nav>
-    <a class="btn btn-dark btn-sm" href="https://github.com/simbasjungles/free-my-tv" rel="noopener">
+    <div class="nav-end">
+      <a class="lang" href="pt/" hreflang="pt-BR" lang="pt-BR" data-lang="pt" aria-label="Ler em português">PT</a>
+      <a class="btn btn-dark btn-sm" href="https://github.com/simbasjungles/free-my-tv" rel="noopener">
       <svg class="gh" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       <span>GitHub</span>
-    </a>
+      </a>
+    </div>
   </header>
 
   <main id="top">
@@ -252,6 +274,7 @@
         <details><summary>Does it change picture quality?</summary><p>No. Picture settings aren't touched, and videos play through the same hardware path. We measured the same resolution and the same video source in both modes.</p></details>
         <details><summary>What gets turned off?</summary><p>The stock home screen and screensaver (replaced), Google TV's recovery home, Play Games and YouTube Music, and on TCL TVs the TCL Channel, messages, store demo, hotel menu, manuals, mirroring and logging apps. Google Assistant only if you ask for it in the config.</p></details>
         <details><summary>Can I make it mine?</summary><p>That's the idea. Open the folder in Claude Code and just ask: "add Crunchyroll to the shelf", "show prices in euros", "set it up for my Sony". It changes the code, rebuilds the app and puts it on your TV.</p></details>
+        <details><summary>Does it speak my language?</summary><p>English and Portuguese, following the TV's language. Want another one? Ask Claude to add it.</p></details>
         <details><summary>Does it collect any data?</summary><p>No accounts, no analytics, no tracking. It only talks to TMDB (picks), Open-Meteo (weather, with the coordinates you set) and Binance (prices).</p></details>
         <details><summary>Is it free?</summary><p>Yes. MIT license, and the TMDB key is free too.</p></details>
       </div>

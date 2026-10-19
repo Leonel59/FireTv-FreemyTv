@@ -1,5 +1,15 @@
 (() => {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pt = document.documentElement.lang.startsWith("pt");
+
+  // The PT/EN switch is remembered, so the automatic choice in <head> doesn't undo it.
+  document.querySelectorAll("[data-lang]").forEach((a) =>
+    a.addEventListener("click", () => {
+      try {
+        localStorage.setItem("lang", a.dataset.lang);
+      } catch {}
+    })
+  );
 
   // Navigation gets a shadow once the page scrolls.
   const nav = document.getElementById("nav");
@@ -151,7 +161,8 @@
       sticky.style.setProperty("--sunset-muted", rgb(mix([110, 110, 115], [168, 168, 178], e)));
       sticky.style.setProperty("--sunset-faint", rgb(mix([142, 142, 147], [130, 132, 160], e)));
       const minutes = 17 * 60 + 20 + Math.round(e * 50); // 5:20 PM -> 6:10 PM
-      clock.textContent = `${Math.floor(minutes / 60) - 12}:${String(minutes % 60).padStart(2, "0")} PM`;
+      const mm = String(minutes % 60).padStart(2, "0");
+      clock.textContent = pt ? `${Math.floor(minutes / 60)}:${mm}` : `${Math.floor(minutes / 60) - 12}:${mm} PM`;
     };
     const queue = () => {
       if (queued) return;
@@ -236,10 +247,10 @@
         sel.removeAllRanges();
         sel.addRange(range);
       }
-      b.textContent = "Copied";
+      b.textContent = pt ? "Copiado" : "Copied";
       b.classList.add("done");
       setTimeout(() => {
-        b.textContent = "Copy";
+        b.textContent = pt ? "Copiar" : "Copy";
         b.classList.remove("done");
       }, 1600);
     })
