@@ -234,6 +234,8 @@
             </li>
             <li><b>Instalar:</b>
               <div class="code"><code>adb connect 192.168.1.50:5555 &amp;&amp; adb install -r FreeMyTV.apk</code><button class="copy-btn" type="button" aria-label="Copiar comando">Copiar</button></div>
+              Nas TVs TCL, libere também o funcionamento em segundo plano (a TCL bloqueia por padrão):
+              <div class="code"><code>adb shell appops set io.freemytv AUTO_START allow</code><button class="copy-btn" type="button" aria-label="Copiar comando">Copiar</button></div>
             </li>
             <li><b>Na TV:</b> abra <em>Free My TV</em> → <em>Início</em> → <em>Free My TV</em>.</li>
           </ol>
