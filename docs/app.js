@@ -259,8 +259,12 @@
   // The film.
   const film = document.getElementById("film");
   const filmVideo = film.querySelector("video");
+  // While the film plays, the page's clips behind it pause, and the ones that were playing resume after.
+  let paused = [];
   document.querySelectorAll("[data-film]").forEach((b) =>
     b.addEventListener("click", () => {
+      paused = [...document.querySelectorAll("video[data-src]")].filter((v) => !v.paused);
+      paused.forEach((v) => v.pause());
       film.showModal();
       filmVideo.play().catch(() => {});
     })
@@ -269,5 +273,9 @@
   film.addEventListener("click", (e) => {
     if (e.target === film) film.close();
   });
-  film.addEventListener("close", () => filmVideo.pause());
+  film.addEventListener("close", () => {
+    filmVideo.pause();
+    if (!reduce) paused.forEach((v) => v.play().catch(() => {}));
+    paused = [];
+  });
 })();
