@@ -27,7 +27,9 @@ before you do it, and let them do the taps on the TV.
    Without a key everything works except the picks and the screensaver photos.
 5. **Build:** `./build.sh` → `FreeMyTV.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
 6. **Install:** `adb connect <IP>:5555`. The TV asks *Allow USB debugging?*: tell them to accept and tick *Always
-   allow*. Then `adb install -r FreeMyTV.apk`.
+   allow*. Then `adb install -r FreeMyTV.apk`. On TCL, also `adb shell appops set io.freemytv AUTO_START allow`:
+   TCL's `TclAppBoot` blocks background jobs by default, so the switch (and the watchdog) never run. The log shows
+   `forbid bind service ... ModeJob`.
 7. **Tell them what the switch does** before they make it: the home screen and screensaver change, a short list of
    promo apps is turned off (never uninstalled), and *Original* brings it all back. On some TVs the remote's
    shortcut buttons belong to the stock home screen (TCL: Netflix, YouTube, Prime), so they rest while Free My TV

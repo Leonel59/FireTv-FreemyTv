@@ -62,6 +62,10 @@ About ten minutes. You need a Google TV or Android TV (Android 12 or newer) and 
    adb connect 192.168.1.50:5555
    adb install -r FreeMyTV.apk
    ```
+   On TCL TVs, also let it run in the background (TCL blocks it by default, and the switch never starts):
+   ```bash
+   adb shell appops set io.freemytv AUTO_START allow
+   ```
 5. **On the TV**, open *Free My TV* → *Home Screen* → *Free My TV*.
 
 ## Settings
