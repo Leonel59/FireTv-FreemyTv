@@ -1222,9 +1222,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawerRects[i].set(x, top, x + tw, top + ROW_H * k);
             x += tw + gap;
         }
-        float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
-        weatherCard.set(left, cardsTop, split - 16 * k, cardsTop + CARDS_H * k);
-        quotesCard.set(split + 16 * k, cardsTop, right, cardsTop + CARDS_H * k);
+        float cardsTop = CARDS_TOP * k;
+        if (Config.SHOW_CRYPTO) {
+            float split = left + (right - left) * 0.585f;
+            weatherCard.set(left, cardsTop, split - 16 * k, cardsTop + CARDS_H * k);
+            quotesCard.set(split + 16 * k, cardsTop, right, cardsTop + CARDS_H * k);
+        } else {
+            weatherCard.set(left, cardsTop, right, cardsTop + CARDS_H * k);
+            quotesCard.setEmpty();
+        }
         drawerDirty = true;
     }
 
@@ -1287,7 +1293,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
         drawWeatherCard(c, weatherCard);
-        drawQuotesCard(c, quotesCard);
+        if (Config.SHOW_CRYPTO) drawQuotesCard(c, quotesCard);
     }
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
@@ -1960,7 +1966,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < 3; i++) if (cardFocus[i].value > 0.02f && (top < 0 || cardFocus[i].value > cardFocus[top].value)) top = i;
         for (int i = 0; i < 3; i++) if (i != top) drawLightCard(c, i);
         if (top >= 0) drawLightCard(c, top);
-        drawQuotes(c);
+        if (Config.SHOW_CRYPTO) drawQuotes(c);
     }
 
     /**

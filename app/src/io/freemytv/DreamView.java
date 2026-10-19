@@ -528,26 +528,28 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             }
 
             // Compact prices under the clock, right-aligned.
-            float base = (CLOCK_TOP + Ui.cap(cornerClock) / k + QUOTES_GAP) * k;
-            float cap = Ui.cap(cornerQuote), gap = 7 * k, spacing = 26 * k;
-            int n = HomeData.coinCount();
-            String[] values = new String[n];
-            float[] glyphs = new float[n];
-            float total = spacing * (n - 1);
-            for (int i = 0; i < n; i++) {
-                values[i] = HomeData.compact(data.prices[i]);
-                glyphs[i] = Glyphs.width(getContext(), HomeData.COINS[i], cap);
-                total += glyphs[i] + gap + cornerQuote.measureText(values[i]);
+            if (Config.SHOW_CRYPTO) {
+                float base = (CLOCK_TOP + Ui.cap(cornerClock) / k + QUOTES_GAP) * k;
+                float cap = Ui.cap(cornerQuote), gap = 7 * k, spacing = 26 * k;
+                int n = HomeData.coinCount();
+                String[] values = new String[n];
+                float[] glyphs = new float[n];
+                float total = spacing * (n - 1);
+                for (int i = 0; i < n; i++) {
+                    values[i] = HomeData.compact(data.prices[i]);
+                    glyphs[i] = Glyphs.width(getContext(), HomeData.COINS[i], cap);
+                    total += glyphs[i] + gap + cornerQuote.measureText(values[i]);
+                }
+                float qx = right - total;
+                for (int i = 0; i < n; i++) {
+                    Glyphs.coin(getContext(), c, HomeData.COINS[i], qx + glyphs[i] / 2, base - cap / 2, cap, 0xA6FFFFFF);
+                    qx += glyphs[i] + gap;
+                    c.drawText(values[i], qx, base, cornerQuote);
+                    qx += cornerQuote.measureText(values[i]) + spacing;
+                }
+                String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
+                if (!stale.isEmpty()) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
             }
-            float qx = right - total;
-            for (int i = 0; i < n; i++) {
-                Glyphs.coin(getContext(), c, HomeData.COINS[i], qx + glyphs[i] / 2, base - cap / 2, cap, 0xA6FFFFFF);
-                qx += glyphs[i] + gap;
-                c.drawText(values[i], qx, base, cornerQuote);
-                qx += cornerQuote.measureText(values[i]) + spacing;
-            }
-            String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
-            if (!stale.isEmpty()) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
         } finally {
             chrome.endRecording();
         }
@@ -768,22 +770,24 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         }
 
         // Prices near the bottom edge: small white logo + value, all four on one line.
-        float cap = Ui.cap(quotePaint), spacing = 56 * k, gap = 10 * k;
-        String[] values = new String[HomeData.coinCount()];
-        float total = spacing * (values.length - 1);
-        for (int i = 0; i < values.length; i++) {
-            values[i] = HomeData.price(data.prices[i]);
-            total += Glyphs.width(getContext(), HomeData.COINS[i], cap) + gap + quotePaint.measureText(values[i]);
+        if (Config.SHOW_CRYPTO) {
+            float cap = Ui.cap(quotePaint), spacing = 56 * k, gap = 10 * k;
+            String[] values = new String[HomeData.coinCount()];
+            float total = spacing * (values.length - 1);
+            for (int i = 0; i < values.length; i++) {
+                values[i] = HomeData.price(data.prices[i]);
+                total += Glyphs.width(getContext(), HomeData.COINS[i], cap) + gap + quotePaint.measureText(values[i]);
+            }
+            float x = cx - total / 2, base = h - 92 * k;
+            for (int i = 0; i < values.length; i++) {
+                float gw = Glyphs.width(getContext(), HomeData.COINS[i], cap);
+                Glyphs.coin(getContext(), c, HomeData.COINS[i], x + gw / 2, base - cap / 2, cap, 0x80FFFFFF);
+                x += gw + gap;
+                c.drawText(values[i], x, base, quotePaint);
+                x += quotePaint.measureText(values[i]) + spacing;
+            }
+            String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
+            if (!stale.isEmpty()) c.drawText(Ui.tr("cotações de ", "prices from ") + stale, cx, base + 38 * k, stalePaint);
         }
-        float x = cx - total / 2, base = h - 92 * k;
-        for (int i = 0; i < values.length; i++) {
-            float gw = Glyphs.width(getContext(), HomeData.COINS[i], cap);
-            Glyphs.coin(getContext(), c, HomeData.COINS[i], x + gw / 2, base - cap / 2, cap, 0x80FFFFFF);
-            x += gw + gap;
-            c.drawText(values[i], x, base, quotePaint);
-            x += quotePaint.measureText(values[i]) + spacing;
-        }
-        String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
-        if (!stale.isEmpty()) c.drawText(Ui.tr("cotações de ", "prices from ") + stale, cx, base + 38 * k, stalePaint);
     }
 }

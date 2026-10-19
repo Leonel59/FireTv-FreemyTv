@@ -24,7 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Crypto prices (Binance, every 5 min) and weather/sunrise/sunset for your location (Open-Meteo, every 30 min), cached
+ * Optional crypto prices (Binance, every 5 min) and weather/sunrise/sunset (Open-Meteo, every 30 min), cached
  * so the screen opens with numbers. Only fetched while the home screen or the screensaver is visible (the screen asks).
  * Neither source needs a key. Location and currency come from config.properties.
  */
@@ -92,9 +92,11 @@ final class HomeData {
     private HomeData(Context c) {
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
         try {
-            String p = cache.getString("prices", null);
-            if (p != null) parsePrices(p);
-            pricesAt = cache.getLong("pricesAt", 0);
+            if (Config.SHOW_CRYPTO) {
+                String p = cache.getString("prices", null);
+                if (p != null) parsePrices(p);
+                pricesAt = cache.getLong("pricesAt", 0);
+            }
             String w = cache.getString("weather", null);
             if (w != null) weather = parseWeather(w);
             weatherAt = cache.getLong("weatherAt", 0);
@@ -108,7 +110,7 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
+        if (Config.SHOW_CRYPTO && !fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
