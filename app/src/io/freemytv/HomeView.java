@@ -1,5 +1,6 @@
 package io.freemytv;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -26,6 +27,7 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeProvider;
 
 import org.json.JSONArray;
@@ -115,6 +117,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         @Override public int focused() { return a11yFocused(); }
         @Override public void focus(int id) { a11yFocus(id); }
         @Override public void click(int id) { activate(); }
+        @Override public boolean clickable(int id) { return (id - 1) / 1000 != WIDGETS; }
     });
     private final RectF a11yRect = new RectF();
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer;
@@ -132,6 +135,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
+    private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
     private final Spring[] topFocus = new Spring[6];
     private final RectF[] topRects = new RectF[6];
@@ -1936,7 +1940,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void back() {
         if (sheetOpen) {
             closeSheet();
-        } else if (zone == Z_DRAWER) {
+        } else if (zone == Z_DRAWER || zone == WIDGETS) {
             closeDrawer();
             retarget(false);
         } else if (zone != Z_SHELF) {
@@ -2001,6 +2005,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     return;
                 }
                 break;
+            case WIDGETS: {
+                List<Integer> on = widgets();
+                int at = on.indexOf(widgetIndex);
+                if (dy < 0 || at < 0) {
+                    zone = Z_DRAWER;
+                } else if (dx != 0 && at + dx >= 0 && at + dx < on.size()) {
+                    widgetIndex = on.get(at + dx);
+                } else {
+                    return;
+                }
+                break;
+            }
             default:
                 if (dx != 0) {
                     int next = Math.max(0, Math.min(drawerItems.size() - 1, drawerIndex + dx));
@@ -2008,6 +2024,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     drawerIndex = next;
                 } else if (dy < 0) {
                     closeDrawer();
+                } else if (talkBack() && !widgets().isEmpty()) {
+                    // Only with TalkBack: the widgets are there to be read, and this is how it gets to them.
+                    zone = WIDGETS;
+                    widgetIndex = widgets().get(0);
                 } else {
                     return;
                 }
@@ -2054,6 +2074,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         wake();
         HomeApps.Item it;
         RectF r;
+        if (!sheetOpen && zone == WIDGETS) return;   // a widget is only read
         if (sheetOpen) {
             if (others.isEmpty()) return;
             it = others.get(gridIndex);
@@ -2111,7 +2132,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - TalkBack: every reachable item as a virtual node (Spoken). Id = group * 1000 + index + 1.
 
-    private static final int GRID = 9;
+    /** The drawer's weather (0) and quotes (1) cards: read by TalkBack, never focused by the remote. */
+    private static final int GRID = 9, WIDGETS = 8;
 
     private static int a11yId(int group, int index) {
         return group * 1000 + index + 1;
@@ -2130,6 +2152,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < Math.min(3, cards.size()); i++) out.add(a11yId(Z_CARDS, i));
         for (int i = 0; i < shelf.size(); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
+        if (drawerOpen && Prefs.weather()) out.add(a11yId(WIDGETS, 0));
+        if (drawerOpen && Prefs.quotes() && HomeData.active().length > 0) out.add(a11yId(WIDGETS, 1));
     }
 
     private String a11yText(int id) {
@@ -2144,6 +2168,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_CARDS: return i < cards.size() ? pickText(cards.get(i)) : "";
             case Z_SHELF: return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
+            case WIDGETS: return i == 0 ? weatherText() : quotesText();
             default: return "";
         }
     }
@@ -2185,6 +2210,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 a11yRect.set(drawerRects[i]);
                 dy = drawerOpen ? 0 : h;
                 break;
+            case WIDGETS:
+                if (!drawerOpen) return false;
+                a11yRect.set(i == 0 ? weatherCard : quotesCard);
+                dy = 0;
+                break;
             default:
                 return false;
         }
@@ -2203,8 +2233,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_CARDS: return cardIndex < cards.size() ? a11yId(Z_CARDS, cardIndex) : -1;
             case Z_SHELF: return shelf.isEmpty() ? -1 : a11yId(Z_SHELF, shelfIndex);
             case Z_DRAWER: return drawerItems.isEmpty() ? -1 : a11yId(Z_DRAWER, drawerIndex);
+            case WIDGETS: return a11yId(WIDGETS, widgetIndex);
             default: return -1;
         }
+    }
+
+    /** The drawer's widgets that are on (0 weather, 1 quotes), with the drawer open. */
+    private List<Integer> widgets() {
+        List<Integer> out = new ArrayList<>();
+        if (!drawerOpen) return out;
+        if (Prefs.weather()) out.add(0);
+        if (Prefs.quotes() && HomeData.active().length > 0) out.add(1);
+        return out;
+    }
+
+    /** A spoken-feedback service (TalkBack) is on. */
+    private boolean talkBack() {
+        AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+        return am != null && am.isEnabled()
+                && !am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_SPOKEN).isEmpty();
     }
 
     /** TalkBack moved to an item: the remote's focus goes there (opening or closing the drawer on the way). */
@@ -2225,6 +2272,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (i >= drawerItems.size()) return;
                 if (!drawerOpen) openDrawer();
                 drawerIndex = i;
+                break;
+            case WIDGETS:
+                if (!widgets().contains(i)) return;
+                widgetIndex = i;
                 break;
             case Z_TOP:
                 if (i >= 3 + lightButtons.size() || (i < 3 && !picksOn())) return;
@@ -2261,6 +2312,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (p.meta != null && !p.meta.isEmpty()) s.append(", ").append(p.meta);
         String app = Recs.serviceName(p);
         if (app != null && !app.isEmpty()) s.append(". App: ").append(app);
+        return s.toString();
+    }
+
+    /** The weather card as TalkBack reads it: what it shows, in the same words and units. */
+    private String weatherText() {
+        StringBuilder s = new StringBuilder(Prefs.city().isEmpty() ? Ui.tr("Clima", "Weather") : Prefs.city());
+        HomeData.Weather wx = data.weather;
+        if (Double.isNaN(wx.temp)) return s.append(". ").append(Ui.tr("Sem dados do clima agora.", "No weather data right now.")).toString();
+        s.append(". ").append(HomeData.degrees(wx.temp)).append(", ").append(HomeData.condition(wx.code, wx.isDay))
+                .append(Ui.tr(". Máxima ", ". High ")).append(HomeData.degrees(wx.max))
+                .append(Ui.tr(", mínima ", ", low ")).append(HomeData.degrees(wx.min)).append('.');
+        int hours = Math.min(6, wx.hours.size());
+        if (hours > 0) s.append(Ui.tr(" Próximas horas: ", " Next hours: "));
+        for (int i = 0; i < hours; i++) {
+            s.append(HomeData.hour(wx.hours.get(i))).append(' ').append(HomeData.degrees(wx.hourTemp.get(i))).append(i < hours - 1 ? ", " : ".");
+        }
+        if (wx.sunrise != 0) s.append(Ui.tr(" Nascer do sol ", " Sunrise ")).append(Ui.time(wx.sunrise)).append('.');
+        if (wx.sunset != 0) s.append(Ui.tr(" Pôr do sol ", " Sunset ")).append(Ui.time(wx.sunset)).append('.');
+        return s.toString();
+    }
+
+    /** The quotes card as TalkBack reads it: each coin with its price and 24 h change. */
+    private String quotesText() {
+        StringBuilder s = new StringBuilder(Ui.tr("Cotações", "Crypto"));
+        String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
+        s.append(", ").append(stale.isEmpty() ? Ui.tr("variação em 24 h", "24h change") : Ui.tr("de ", "", "de ") + stale).append('.');
+        for (int i : HomeData.active()) {
+            s.append(' ').append(HomeData.coinName(i)).append(' ').append(HomeData.brl(data.prices[i]));
+            if (!Double.isNaN(data.changes[i])) s.append(", ").append(HomeData.change(data.changes[i]));
+            s.append('.');
+        }
         return s.toString();
     }
 
