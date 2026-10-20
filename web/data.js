@@ -285,7 +285,9 @@ var Data = (function () {
     pt: {'Action & Adventure': 'Ação e Aventura', 'Sci-Fi & Fantasy': 'Ficção Científica e Fantasia', 'War & Politics': 'Guerra e Política',
       'Kids': 'Infantil', 'News': 'Notícias', 'Soap': 'Novela', 'Talk': 'Entrevistas'},
     es: {'Action & Adventure': 'Acción y Aventura', 'Sci-Fi & Fantasy': 'Ciencia ficción y Fantasía', 'War & Politics': 'Guerra y Política',
-      'Kids': 'Infantil', 'News': 'Noticias', 'Soap': 'Telenovela', 'Talk': 'Entrevistas'}
+      'Kids': 'Infantil', 'News': 'Noticias', 'Soap': 'Telenovela', 'Talk': 'Entrevistas'},
+    de: {'Action & Adventure': 'Action & Abenteuer', 'War & Politics': 'Krieg & Politik', 'Kids': 'Kinder', 'News': 'Nachrichten',
+      'Soap': 'Seifenoper', 'Talk': 'Talkshow'}
   };
 
   /** The best backdrop: no text over it, the largest, then the best rated. */
@@ -500,6 +502,7 @@ var Data = (function () {
     hour: function (at) {
       var d = new Date(at), h = d.getHours();
       if (I18N.lang === 'en') return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM');
+      if (I18N.lang === 'de') return (h < 10 ? '0' : '') + h + ' Uhr';
       return (I18N.lang === 'es' || I18N.lang === 'ru') ? (h < 10 ? '0' : '') + h + ':00' : h + 'h';
     },
     time: function (at) {
