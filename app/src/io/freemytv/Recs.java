@@ -171,7 +171,8 @@ final class Recs {
         List<Pick> list = new ArrayList<>();
         if (!hasKey(context)) return list;    // no TMDB key: no recommendations
         for (Pick p : picks) {
-            if ((kind == null || kind.equals(p.kind)) && (!p.detailed || p.pkg != null)) list.add(p);   // app missing: skip
+            if ((kind == null || kind.equals(p.kind))
+                    && (!p.detailed || (p.pkg != null && installed(p.pkg)))) list.add(p);   // app missing: skip
         }
         if (list.isEmpty()) return list;
         long hour = System.currentTimeMillis() / 3600_000L;
@@ -229,7 +230,7 @@ final class Recs {
     void refreshIfStale() {
         if (!hasKey(context) || fetching) return;
         long now = System.currentTimeMillis();
-        long stamp = Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode();   // a new key or country refetches
+        long stamp = sourceStamp();   // a new key, country or installed streaming-app set refetches
         boolean newKey = stamp != keyStamp;
         long sinceFail = now - failedAt;    // negative = the clock went back: don't wait
         if (!newKey && failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
@@ -292,7 +293,8 @@ final class Recs {
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (Pick p : wanted()) if (hasImage(p) && seen.add(franchise(p.title))) out.add(p);
         for (Pick p : picks) {
-            if (p.detailed && p.pkg != null && hasImage(p) && seen.add(franchise(p.title))) out.add(p);
+            if (p.detailed && p.pkg != null && installed(p.pkg) && hasImage(p)
+                    && seen.add(franchise(p.title))) out.add(p);
         }
         return out;
     }
@@ -524,6 +526,12 @@ final class Recs {
 
     private boolean installed(String pkg) {
         return HomeApps.launchIntent(context.getPackageManager(), pkg) != null;
+    }
+
+    private long sourceStamp() {
+        long stamp = Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode();
+        for (String[] service : SERVICES) stamp = stamp * 31L + (installed(service[2]) ? service[2].hashCode() : 0);
+        return stamp;
     }
 
     private JSONObject get(String path) throws IOException, org.json.JSONException {
