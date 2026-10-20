@@ -381,16 +381,22 @@ final class HomeApps {
     }
 
     /**
-     * Live TV: the antenna input's channels through the standard Android request (opening the TV app by itself may go
-     * back to the last input used, like an HDMI); otherwise a known live TV app. Null = this TV has none.
+     * Live TV: tune the antenna input directly. MediaTek TV Center otherwise restores the last source used, which can
+     * be HDMI, so its explicit activity receives the tuner URI. Other TV apps keep the standard channel-list request.
      */
     static Intent liveTv(Context c) {
         PackageManager pm = c.getPackageManager();
         String tuner = tunerInput(c);
+        Intent mediaTek = launchIntent(pm, "com.mediatek.wwtv.tvcenter");
+        if (mediaTek != null && tuner != null) {
+            return new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(tuner))
+                    .setComponent(mediaTek.getComponent());
+        }
         if (tuner != null) {
             Intent channels = new Intent(Intent.ACTION_VIEW, TvContract.buildChannelsUriForInput(tuner));
             if (channels.resolveActivity(pm) != null) return channels;
         }
+        if (mediaTek != null) return mediaTek;
         for (String pkg : LIVE_TV_APPS) {
             Intent app = launchIntent(pm, pkg);
             if (app != null) return app;
