@@ -328,8 +328,24 @@ var Data = (function () {
       }
       if (p.service && p.app) parts.push(p.service);
       p.meta = parts.join(' · ');
-      p.detailed = true;
-      done(null);
+      title(p, o, function () {
+        p.detailed = true;
+        done(null);
+      });
+    });
+  }
+
+  /**
+   * Without a title in the TV's language TMDB answers with the original one, so a Korean series on a German TV reads
+   * "닥터X: 하얀 마피아의 시대". Then the English title, when TMDB has one (one more request, only for those).
+   */
+  function title(p, o, done) {
+    var field = p.kind === 'movie' ? 'title' : 'name', own = o[field] || p.title;
+    p.title = own;
+    if (I18N.lang === 'en' || !own || own !== o['original_' + field] || o.original_language === I18N.lang) { done(); return; }
+    tmdb('/' + p.kind + '/' + p.id + '?language=en-US', function (err, en) {
+      if (!err && en && en[field]) p.title = en[field];
+      done();
     });
   }
 
