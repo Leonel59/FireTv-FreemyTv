@@ -1,24 +1,95 @@
 /*
- * On-screen text in Portuguese, English and Spanish (the same copy as the Android app).
+ * On-screen text in Portuguese, English, Spanish and Russian (the same copy as the Android app).
  * tr(pt, en, es): the text in the current language. The language follows the TV unless set in Home Settings.
  */
 var I18N = (function () {
   'use strict';
 
   var lang = 'en';
+  var russian = {
+    "Live TV": "Телеканалы",
+    "All Apps": "Все приложения",
+    "Settings": "Настройки",
+    "Home Settings": "Настройки экрана",
+    "TV Settings": "Настройки телевизора",
+    "HDMI Inputs": "Входы HDMI",
+    "Inputs": "Входы",
+    "Shortcuts": "Ярлыки",
+    "Weather": "Погода",
+    "No weather data right now.": "Сейчас нет данных о погоде.",
+    "Sunrise ": "Восход ",
+    "Sunset ": "Закат ",
+    "Crypto": "Криптовалюты",
+    "24h change": "изменение за 24 ч",
+    "For You": "Для вас",
+    "Couldn't open ": "Не удалось открыть ",
+    "Dollar": "Доллар",
+    "Series": "Сериал",
+    "now": "сейчас",
+    "Language": "Язык",
+    "Temperature": "Температура",
+    "Theme": "Тема",
+    "Automatic": "Автоматически",
+    "Light": "Светлая",
+    "Dark": "Тёмная",
+    "Weather widget": "Виджет погоды",
+    "Quotes widget": "Виджет котировок",
+    "On": "Вкл.",
+    "Off": "Выкл.",
+    "Shelf": "Избранные приложения",
+    "OK or the arrows change the value.": "Нажмите OK или стрелки, чтобы изменить значение.",
+    "Explore": "Обзор",
+    "Movies": "Фильмы",
+    "Shows": "Сериалы",
+    "Clear": "Ясно",
+    "Mostly Sunny": "Малооблачно",
+    "Mostly Clear": "Малооблачно",
+    "Partly Cloudy": "Переменная облачность",
+    "Cloudy": "Облачно",
+    "Fog": "Туман",
+    "Drizzle": "Морось",
+    "Heavy Rain": "Сильный дождь",
+    "Snow": "Снег",
+    "Thunderstorms": "Гроза",
+    "Rain": "Дождь",
+    "On · ": "В избранном · ",
+    "OK adds or removes · ← → change the order": "OK — добавить или убрать · ← → — изменить порядок",
+    "Couldn't open TV Settings": "Не удалось открыть настройки телевизора",
+    "Action & Adventure": "Боевик и приключения",
+    "Sci-Fi & Fantasy": "Фантастика и фэнтези",
+    "War & Politics": "Война и политика",
+    "Kids": "Для детей",
+    "News": "Новости",
+    "Soap": "Мыльная опера",
+    "Talk": "Ток-шоу",
+    "": ""
+  };
+
+  function russianText(en) {
+    if (Object.prototype.hasOwnProperty.call(russian, en)) return russian[en];
+    var m = /^(\d+) (min|h) ago$/.exec(en);
+    if (m) return m[1] + (m[2] === 'min' ? ' мин назад' : ' ч назад');
+    m = /^The shelf holds up to (\d+) apps\.$/.exec(en);
+    if (m) return 'В избранное можно добавить не более ' + m[1] + ' приложений.';
+    return en;
+  }
 
   function detect(setting) {
     var v = (setting || 'auto').toLowerCase();
     if (v === 'auto') v = (navigator.language || 'en').toLowerCase();
-    return v.indexOf('pt') === 0 ? 'pt' : v.indexOf('es') === 0 ? 'es' : 'en';
+    return v.indexOf('ru') === 0 ? 'ru' : v.indexOf('pt') === 0 ? 'pt' : v.indexOf('es') === 0 ? 'es' : 'en';
   }
 
   return {
     set: function (setting) { lang = detect(setting); document.documentElement.lang = lang === 'pt' ? 'pt-BR' : lang; },
+    count: function (n, one, few, many) {
+      var last = Math.abs(n % 100);
+      return n + ' ' + (last >= 11 && last <= 14 ? many : last % 10 === 1 ? one : last % 10 >= 2 && last % 10 <= 4 ? few : many);
+    },
     get lang() { return lang; },
-    tr: function (pt, en, es) { return lang === 'es' ? (es || en) : lang === 'en' ? en : pt; },
+    tr: function (pt, en, es) { return lang === 'ru' ? russianText(en) : lang === 'es' ? (es || en) : lang === 'en' ? en : pt; },
     /** BCP 47 tag for dates, numbers and TMDB. */
-    locale: function () { return lang === 'es' ? 'es-MX' : lang === 'en' ? 'en-US' : 'pt-BR'; }
+    locale: function () { return lang === 'ru' ? 'ru-RU' : lang === 'es' ? 'es-MX' : lang === 'en' ? 'en-US' : 'pt-BR'; }
   };
 })();
 
