@@ -147,7 +147,7 @@ public class SettingsActivity extends Activity {
                 state = HomeMode.state(getContext());
                 hasKey = Recs.hasKey(getContext());
                 recs = Recs.status(getContext());
-                boolean nowBusy = !state.optString("busy").isEmpty();
+                boolean nowBusy = !busyText().isEmpty();
                 if (nowBusy) pendingAt = 0;
                 // A switch just ended: TalkBack reads how it went (the newest notice).
                 JSONArray notices = state.optJSONArray("notices");
@@ -157,7 +157,7 @@ public class SettingsActivity extends Activity {
                 }
                 wasBusy = nowBusy;
                 invalidate();
-                handler.postDelayed(this, 500);
+                handler.postDelayed(this, busy() ? 500 : 2000);
             }
         };
 
@@ -198,7 +198,7 @@ public class SettingsActivity extends Activity {
             switch (screen) {
                 case MAIN: {
                     if (row == 0) {
-                        String busyText = state.optString("busy");
+                        String busyText = busyText();
                         String value = busy() ? (busyText.isEmpty() ? Ui.tr("Começando…", "Starting…") : busyText)
                                 : freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
                         return Ui.tr("Início, ", "Home Screen, ") + value;
@@ -311,7 +311,13 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean busy() {
-            return !state.optString("busy").isEmpty() || (pendingAt != 0 && SystemClock.uptimeMillis() - pendingAt < 10_000);
+            return !busyText().isEmpty() || (pendingAt != 0 && SystemClock.uptimeMillis() - pendingAt < 10_000);
+        }
+
+        private String busyText() {
+            long at = state.optLong("busyAt"), now = SystemClock.elapsedRealtime();
+            boolean stale = now < at || now - at > 10 * 60_000L;
+            return stale ? "" : state.optString("busy");
         }
 
         private boolean freeActive() {
@@ -358,7 +364,7 @@ public class SettingsActivity extends Activity {
 
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
-            String busyText = state.optString("busy");
+            String busyText = busyText();
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"),
                     Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Prateleira", "Shelf"),
@@ -877,7 +883,8 @@ public class SettingsActivity extends Activity {
             Context c = getContext();
             if (screen == HOME_CHOICE) {
                 boolean wantFree = focus == 0;
-                if (wantFree != freeActive() && !busy()) {
+                boolean already = wantFree ? freeActive() : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL));
+                if (!already && !busy()) {
                     HomeMode.request(c, wantFree ? HomeMode.FREE : HomeMode.ORIGINAL);
                     pendingAt = SystemClock.uptimeMillis();
                 }
