@@ -180,7 +180,9 @@ final class HomeMode {
                 throw new IOException(Ui.tr("o Wi-Fi foi salvo pela configuração inicial da TV, e desligar esse app apagaria a rede. "
                         + "Em Configurações → Rede e Internet, esqueça a rede e conecte de novo; depois tente outra vez.",
                         "your Wi-Fi was saved by the TV's first setup, and turning that app off would erase it. "
-                        + "In Settings → Network & Internet, forget the network and connect again, then try once more."));
+                        + "In Settings → Network & Internet, forget the network and connect again, then try once more.",
+                        "el Wi-Fi lo guardó la configuración inicial del TV, y desactivar esa app borraría la red. "
+                        + "En Ajustes → Red e Internet, olvida la red y vuelve a conectarte; luego inténtalo otra vez."));
             }
             if (metrics(latest, ORIGINAL) == null && !home.isEmpty()) {
                 busy(c, Ui.tr("Medindo o Início original…", "Measuring the original home screen…"));

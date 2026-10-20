@@ -76,7 +76,8 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
   Android 13+, with a fallback for 12). Keep it at 60 fps: no allocations in `onDraw`, no work on the UI thread.
 - `HomeMode` runs every switch as a background job (`ModeJob`) in the main process; the UI is in the `:home`
   process. `Watchdog` goes back to the stock home screen after 3 crashes in 5 minutes.
-- On-screen text is bilingual, `Ui.tr("pt", "en")`: add both. Comments in English, short, only where the why
+- On-screen text: `Ui.tr("pt", "en")`, with the Spanish in `Spanish.java` (keyed by the English); text built at
+  runtime uses `Ui.tr(pt, en, es)`. Add all three. Comments in English, short, only where the why
   isn't obvious.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
   What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons) wins over those first values.

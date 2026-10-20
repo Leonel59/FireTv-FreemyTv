@@ -25,6 +25,7 @@ final class Prefs {
 
     static void init(Context c) {
         app = c.getApplicationContext();
+        Ui.applyLanguage();   // the language picked on the TV, now that it can be read
     }
 
     private static SharedPreferences sp() {
@@ -47,10 +48,10 @@ final class Prefs {
     static String language() {
         String v = app == null ? Config.LANGUAGE : sp().getString("language", Config.LANGUAGE);
         v = v.trim().toLowerCase(Locale.ROOT);
-        return v.startsWith("pt") ? "pt" : v.startsWith("en") ? "en" : "auto";
+        return v.startsWith("pt") ? "pt" : v.startsWith("es") ? "es" : v.startsWith("en") ? "en" : "auto";
     }
 
-    static void setLanguage(String v) { put("language", v); Ui.en = Ui.english(); }
+    static void setLanguage(String v) { put("language", v); Ui.applyLanguage(); }
 
     /** "auto", "C" or "F". */
     static String temperature() {
