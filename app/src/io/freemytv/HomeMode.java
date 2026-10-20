@@ -71,7 +71,7 @@ final class HomeMode {
         "com.homwee.help",                                                            // user manual
         // Xiaomi
         "com.miui.tv.analytics", "com.xiaomi.statistic",                              // telemetry
-        "com.mitv.tvhome.mitvplus",                                                   // Mi TV+: promo channels
+        "com.mitv.tvhome.mitvplus", "com.xm.webcontent",                              // Mi TV+ promo channels, promo web content
     };
 
     /** The voice assistant, only with disable_assistant=true in config.properties (the mic button stops working). */
