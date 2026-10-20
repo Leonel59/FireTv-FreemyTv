@@ -458,6 +458,7 @@ final class Recs {
     private void fetchDetails(Pick p) throws Exception {
         JSONObject o = get("/" + p.kind + "/" + p.id
                 + "?language=" + lang() + "&append_to_response=watch/providers,images&include_image_language=null," + Ui.language + ",en");
+        p.title = title(p, o);
         String best = bestBackdrop(o.optJSONObject("images"));
         if (best != null) p.backdrop = best;
         List<String> parts = new ArrayList<>();
@@ -492,6 +493,24 @@ final class Recs {
         if (p.app != null) parts.add(SERVICE_NAME.get(p.app));
         p.meta = String.join(" · ", parts);
         p.detailed = true;
+    }
+
+    /**
+     * Without a title in the TV's language TMDB answers with the original one, so a Korean series on a German TV reads
+     * "닥터X: 하얀 마피아의 시대". Then the English title, when TMDB has one (one more request, only for those).
+     */
+    private String title(Pick p, JSONObject o) {
+        String field = p.kind.equals("movie") ? "title" : "name";
+        String own = o.optString(field, p.title);
+        String original = o.optString("original_language");
+        if (Ui.en || own.isEmpty() || !own.equals(o.optString("original_" + field))
+                || Ui.language.equals(original) || "en".equals(original)) return own;
+        try {
+            String english = get("/" + p.kind + "/" + p.id + "?language=en-US").optString(field);
+            return english.isEmpty() ? own : english;
+        } catch (Exception e) {
+            return own;
+        }
     }
 
     /** TV genres that TMDB returns in English even in pt-BR. */
