@@ -67,6 +67,48 @@ EOF
 # Fonts uncompressed: Android reads them straight from the APK.
 "$BT/aapt2" link -o out/base.apk -I "$AJ" --manifest app/AndroidManifest.xml --java out/gen out/res.zip \
   --min-sdk-version 28 --target-sdk-version 33 -A app/assets -0 ttf
+# Windows aapt2 packs assets with backslash separators ("assets/symbols\x.png") and Android
+# cannot find them: the home screen loses its icons and fonts. Rename the zip entries to "/".
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    cat > out/FixAssets.java <<'EOF'
+import java.nio.file.*;
+import java.util.zip.*;
+
+class FixAssets {
+    public static void main(String[] args) throws Exception {
+        Path apk = Paths.get(args[0]);
+        Path tmp = apk.resolveSibling(apk.getFileName() + ".fixed");
+        int renamed = 0;
+        try (ZipInputStream in = new ZipInputStream(Files.newInputStream(apk));
+             ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(tmp))) {
+            for (ZipEntry e; (e = in.getNextEntry()) != null; ) {
+                byte[] data = in.readAllBytes();
+                String name = e.getName().replace('\\', '/');
+                if (!name.equals(e.getName())) renamed++;
+                ZipEntry n = new ZipEntry(name);
+                if (e.getMethod() == ZipEntry.STORED) { // Android reads fonts straight from the APK
+                    n.setMethod(ZipEntry.STORED);
+                    n.setSize(data.length);
+                    n.setCompressedSize(data.length);
+                    CRC32 crc = new CRC32();
+                    crc.update(data);
+                    n.setCrc(crc.getValue());
+                }
+                out.putNextEntry(n);
+                out.write(data);
+                out.closeEntry();
+            }
+        }
+        if (renamed > 0) Files.move(tmp, apk, StandardCopyOption.REPLACE_EXISTING);
+        else Files.delete(tmp);
+        System.out.println("FixAssets: renamed " + renamed + " asset paths in " + apk.getFileName());
+    }
+}
+EOF
+    "${JAVA_HOME:+$JAVA_HOME/bin/}java" out/FixAssets.java out/base.apk
+    ;;
+esac
 "$JAVAC" -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$AJ:$BT/core-lambda-stubs.jar" -classpath "$AJ" \
   -d out/classes $(find app/src out/gen -name '*.java')
 "$BT/d8" --release --min-api 28 --lib "$AJ" --output out $(find out/classes -name '*.class')
