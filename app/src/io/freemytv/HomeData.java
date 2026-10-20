@@ -251,6 +251,7 @@ final class HomeData {
                 + "&name=" + URLEncoder.encode(name.trim(), "UTF-8")));
         JSONArray results = o.optJSONArray("results");
         List<String[]> out = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();   // places with the same name, state and country read the same
         for (int i = 0; results != null && i < results.length(); i++) {
             JSONObject r = results.getJSONObject(i);
             String city = r.optString("name", "");
@@ -259,6 +260,7 @@ final class HomeData {
             for (String part : new String[] {r.optString("admin1", ""), r.optString("country", "")}) {
                 if (!part.isEmpty() && !part.equals(city)) label.append(", ").append(part);
             }
+            if (!seen.add(label.toString())) continue;
             out.add(new String[] {label.toString(), city,
                     String.format(Locale.US, "%.4f", r.getDouble("latitude")), String.format(Locale.US, "%.4f", r.getDouble("longitude"))});
         }
