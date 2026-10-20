@@ -1,11 +1,11 @@
 /*
- * The home screen for TVs that run web apps (LG webOS), with the Android app's design and behavior (HomeView):
+ * The home screen for web-app TVs (LG webOS, Samsung Tizen), with the Android app's design and behavior (HomeView):
  *  - top: the "For You" title and the tabs (Explore, Movies, Shows); icon-only glass buttons at the right (Live TV,
  *    HDMI Inputs, Settings) and the crypto quotes at the end of the tab row;
  *  - three picks for this hour in the selected tab; the background is the first one's photo, blurred and almost white;
  *  - the glass shelf with the apps; ↓ opens the drawer (inputs, shortcuts, weather, prices); ↑ or Back closes it;
  *  - a night look from sunset to sunrise; a screensaver after a few idle minutes.
- * The remote's arrows, OK and Back move the focus; the Magic Remote's pointer focuses what it points at.
+ * The remote's arrows, OK and Back move the focus; a pointer (LG's Magic Remote) focuses what it points at.
  */
 (function () {
   'use strict';
@@ -323,7 +323,7 @@
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('Todos os Apps', 'All Apps', 'Todas las apps'), symbol: 'apps', run: openApps});
     drawerItems.push({label: tr('Ajustes do Início', 'Home Settings', 'Ajustes de inicio'), symbol: 'settings', run: openSettings});
-    drawerItems.push({label: tr('Ajustes da TV', 'TV Settings', 'Ajustes del TV'), symbol: 'tv_settings', run: function () { TV.settings(); }});
+    drawerItems.push({label: tr('Ajustes da TV', 'TV Settings', 'Ajustes del TV'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
     var tw = Math.min(230, (1760 - Math.max(0, n - groups) * gap - (groups - 1) * groupGap) / Math.max(1, n));
     var xPos = 80;
@@ -369,7 +369,7 @@
   }
 
   function renderWeather(card) {
-    el('div', 'head', card, CONFIG.city || tr('Clima', 'Weather', 'Clima'));
+    el('div', 'head', card, Data.city || tr('Clima', 'Weather', 'Clima'));
     var w = Data.weather;
     if (!w) {
       el('div', 'cond', card, tr('Sem dados do clima agora.', 'No weather data right now.', 'No hay datos del clima ahora.')).style.top = '96px';
@@ -477,7 +477,7 @@
         step: function () { Prefs.set('quotes', !Prefs.quotes()); Data.settingsChanged(); }}
     ];
     var names = ['Bitcoin', 'Ethereum', 'Solana', tr('Dólar', 'Dollar', 'Dólar')];
-    var count = (CONFIG.currency || 'USD').toUpperCase() === 'BRL' ? 4 : 3;
+    var count = Data.currency === 'BRL' ? 4 : 3;
     for (var i = 0; i < count; i++) {
       (function (i) {
         rows.push({label: names[i], toggle: Prefs.quotes() && Prefs.coin(i), dim: !Prefs.quotes(),
@@ -485,7 +485,7 @@
       })(i);
     }
     rows.push({label: tr('Prateleira', 'Shelf', 'Estante'), value: '›', step: function (d) { if (d >= 0) openShelfEdit(); }});
-    rows.push({label: tr('Ajustes da TV', 'TV Settings', 'Ajustes del TV'), value: '›', step: function (d) { if (d >= 0) TV.settings(); }});
+    rows.push({label: tr('Ajustes da TV', 'TV Settings', 'Ajustes del TV'), value: '›', step: function (d) { if (d >= 0) tvSettings(); }});
     return rows;
   }
 
@@ -602,11 +602,22 @@
     };
   }
 
+  function tvSettings() {
+    TV.settings(function (ok) {
+      if (!ok) toast(tr('Não deu para abrir os Ajustes da TV', "Couldn't open TV Settings", 'No se pudieron abrir los Ajustes del TV'));
+    });
+  }
+
+  function liveTV() {
+    for (var i = 0; i < inputs.length; i++) if (inputs[i].key === 'live') return inputs[i];
+    return null;
+  }
+
   function activate() {
     switch (st.zone) {
       case Z.TOP:
         if (st.top < 3) return;
-        if (st.top === 3) launcher('com.webos.app.livetv', tr('TV aberta', 'Live TV', 'TV en vivo'))();
+        if (st.top === 3) { var live = liveTV(); if (live) launcher(live.id, tr('TV aberta', 'Live TV', 'TV en vivo'))(); }
         else if (st.top === 4) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
         else openSettings();
         return;
@@ -849,8 +860,11 @@
     checkNight();
   });
 
+  function reopened() { reset(); loadApps(function () { renderShelf(); renderDrawer(); Data.refresh(); }); }
+
   window.addEventListener('resize', fit);
-  document.addEventListener('webOSRelaunch', function () { reset(); loadApps(function () { renderShelf(); renderDrawer(); Data.refresh(); }); });
+  document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running
+  window.addEventListener('appcontrol', reopened);        // Samsung: the same
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { hideSaver(); return; }
     idleAt = Date.now();

@@ -3,9 +3,36 @@
  *  - the picks: what's trending this week and recent releases, only from the streaming apps on this TV (TMDB, with
  *    the person's own free key from config.properties), three per hour;
  *  - weather, sunrise and sunset (Open-Meteo, every 30 min) and optional crypto prices (Binance, every 5 min).
- * Settings changed on the TV (Prefs) win over config.properties, as on Android.
+ * Settings changed on the TV (Prefs) win over config.properties, as on Android. Built without a city (--generic), the
+ * TV's time zone gives the city, and its country the currency and the region (zones.js).
  */
 var CONFIG = window.CONFIG || {};
+
+var Place = (function () {
+  'use strict';
+  var EURO = /^(AT|BE|CY|DE|EE|ES|FI|FR|GR|HR|IE|IT|LT|LU|LV|MT|NL|PT|SI|SK)$/;
+
+  /** A time zone's main city: {country, lat, lon, name}, or null. */
+  function zone(name) {
+    var all = window.ZONES || {}, v = all[name], hops = 0;
+    while (v && v.charAt(0) === '=' && hops++ < 3) { name = v.slice(1); v = all[name]; }
+    if (!v) return null;
+    var p = v.split(',');
+    return {country: p[0], lat: p[1], lon: p[2], name: p[3] || name.slice(name.lastIndexOf('/') + 1).replace(/_/g, ' ')};
+  }
+
+  var tz = zone(TV.zone()), set = CONFIG.latitude !== '' && CONFIG.latitude !== undefined;
+  var country = (CONFIG.tmdbRegion || (tz ? tz.country : '') || 'US').toUpperCase();
+  return {
+    lat: set ? CONFIG.latitude : tz ? tz.lat : '40.7128',
+    lon: set ? CONFIG.longitude : tz ? tz.lon : '-74.0060',
+    city: CONFIG.city || (!set && tz ? tz.name : ''),
+    country: country,
+    currency: (CONFIG.currency || (country === 'BR' ? 'BRL' : EURO.test(country) ? 'EUR' : 'USD')).toUpperCase(),
+    /** Fahrenheit for TVs in the US (by their time zone, or their language when it doesn't tell). */
+    fahrenheit: tz ? tz.country === 'US' : /-US$/i.test(navigator.language || '')
+  };
+})();
 
 var Prefs = (function () {
   'use strict';
@@ -62,7 +89,7 @@ var Data = (function () {
 
   // MARK: - Weather
 
-  var PLACE = (CONFIG.latitude || '40.7128') + ',' + (CONFIG.longitude || '-74.0060');
+  var PLACE = Place.lat + ',' + Place.lon;
   var weather = null, weatherAt = 0, fetchingWeather = false;
   (function () {
     var w = stored('weather');
@@ -97,7 +124,7 @@ var Data = (function () {
     var now = Date.now();
     if (fetchingWeather || (now - weatherAt < 30 * 60000 && now >= weatherAt)) return;
     fetchingWeather = true;
-    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + (CONFIG.latitude || '40.7128') + '&longitude=' + (CONFIG.longitude || '-74.0060')
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + Place.lat + '&longitude=' + Place.lon
         + '&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset'
         + '&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2';
     get(url, {}, function (err, body) {
@@ -113,7 +140,7 @@ var Data = (function () {
   // MARK: - Prices
 
   var COINS = ['BTC', 'ETH', 'SOL', 'USDT'];
-  var CURRENCY = (CONFIG.currency || 'USD').toUpperCase();
+  var CURRENCY = Place.currency;
   var QUOTE = CURRENCY === 'USD' ? 'USDT' : CURRENCY;
   var prices = [NaN, NaN, NaN, NaN], changes = [NaN, NaN, NaN, NaN], pricesAt = 0, fetchingPrices = false;
 
@@ -161,10 +188,10 @@ var Data = (function () {
   // MARK: - Picks (TMDB)
 
   var KEY = (CONFIG.tmdbKey || '').trim();
-  var REGION = (CONFIG.tmdbRegion || 'US').toUpperCase();
+  var REGION = Place.country;
   var API = 'https://api.themoviedb.org/3';
 
-  /** Service name on TMDB (part of it, lowercase) → our key, how to find its app on an LG TV, its name. */
+  /** Service name on TMDB (part of it, lowercase) → our key, how to find its app on the TV (id, name), its name. */
   var SERVICES = [
     ['netflix', 'netflix', /^netflix$/, /netflix/i, 'Netflix'],
     ['prime video', 'prime', /^amazon$/, /prime video|amazon/i, 'Prime Video'],
@@ -420,6 +447,8 @@ var Data = (function () {
 
   return {
     COINS: COINS,
+    city: Place.city,
+    currency: CURRENCY,
     onChange: function (fn) { listeners.push(fn); },
     setApps: function (apps) { installed = apps; },
     appFor: appFor,
@@ -464,7 +493,7 @@ var Data = (function () {
     degrees: function (v) {
       if (v === undefined || v === null || isNaN(v)) return '—';
       var unit = Prefs.temperature();
-      var f = unit === 'F' || (unit === 'auto' && /-US$/i.test(navigator.language || ''));
+      var f = unit === 'F' || (unit === 'auto' && Place.fahrenheit);
       return Math.round(f ? v * 9 / 5 + 32 : v) + '°';
     },
     hour: function (at) {
