@@ -41,7 +41,10 @@ final class HomeMode {
 
     /** Google TV's home screen: the fallback when the TV's own one wasn't recorded. */
     static final String GOOGLE_HOME = "com.google.android.apps.tv.launcherx/.home.HomeActivity";
-    /** Google TV has a RecoveryActivity that would take over the home screen without its launcher. */
+    /**
+     * Google TV has a RecoveryActivity that would take over the home screen without its launcher. Older Android TV
+     * (Android 9) has the same setup app without a home screen: there it is left alone.
+     */
     static final String GOOGLE_SETUP = "com.google.android.tungsten.setupwraith";
 
     /**
@@ -176,7 +179,8 @@ final class HomeMode {
             // Turning off an app makes Android delete the Wi-Fi networks it saved (#14), and Original can't bring them
             // back. The TV's first setup usually saved the network: then stop here, before anything changes.
             Set<String> owners = wifiOwners(adb);
-            if (owners.contains(GOOGLE_SETUP) || owners.contains(packageOf(home))) {
+            boolean setupHome = setupIsHome(adb);
+            if ((setupHome && owners.contains(GOOGLE_SETUP)) || owners.contains(packageOf(home))) {
                 throw new IOException(Ui.tr("a configuração inicial da TV salvou o Wi-Fi, e desligá-la apagaria essas redes. "
                         + "Em Configurações → Rede e Internet, esqueça a rede e conecte de novo (as fora de alcance não aparecem "
                         + "lá: o Claude Code apaga pelo computador) e tente outra vez.",
@@ -196,7 +200,7 @@ final class HomeMode {
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
             adb.shell("settings put secure screensaver_components " + DREAM);
-            List<String> targets = targets(home, dream);
+            List<String> targets = targets(home, dream, setupHome);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
             Set<String> present = packages(adb, "");
             int done = 0;
@@ -211,7 +215,7 @@ final class HomeMode {
             Watchdog.clear(c);
             s = state(c);
             s.put("mode", FREE).put("since", System.currentTimeMillis()).put("homeReverted", false)
-                    .put("disabled", new JSONArray(sorted(disabled)));
+                    .put("disabled", new JSONArray(sorted(disabled))).put("setupHome", setupHome);
             save(c, s);
             if (RemoteKeys.supported()) {
                 try {
@@ -238,7 +242,7 @@ final class HomeMode {
             busy(c, Ui.tr("Religando os apps…", "Turning the apps back on…"));
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
-            for (String pkg : targets(home, s.optString("originalDream", ""))) {
+            for (String pkg : targets(home, s.optString("originalDream", ""), true)) {
                 if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
             }
             Set<String> present = packages(adb, "");
@@ -341,7 +345,7 @@ final class HomeMode {
                 boolean reverted = s.optBoolean("homeReverted");
                 String home = originalHome(s);
                 Set<String> wanted = new HashSet<>(stringList(s, "disabled"));
-                for (String pkg : targets(home, s.optString("originalDream", ""))) {
+                for (String pkg : targets(home, s.optString("originalDream", ""), s.optBoolean("setupHome", true))) {
                     if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP))) wanted.add(pkg);
                 }
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
@@ -380,12 +384,15 @@ final class HomeMode {
         }
     }
 
-    /** What to turn off: the TV's own home screen and screensaver, Google TV's recovery home, and the lists above. */
-    private static List<String> targets(String home, String dream) {
+    /**
+     * What to turn off: the TV's own home screen and screensaver, Google TV's recovery home (when setupHome: the setup
+     * app is one of the TV's home screens), and the lists above.
+     */
+    private static List<String> targets(String home, String dream, boolean setupHome) {
         List<String> out = new ArrayList<>();
         String homePkg = packageOf(home);
         if (homePkg != null && !homePkg.equals(PKG)) out.add(homePkg);
-        out.add(GOOGLE_SETUP);
+        if (setupHome) out.add(GOOGLE_SETUP);
         String dreamPkg = packageOf(dream);
         if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
         out.addAll(Arrays.asList(DEBLOAT));
@@ -418,6 +425,12 @@ final class HomeMode {
         String component = lines[lines.length - 1].trim();
         // With no default home yet, the system's chooser answers ("android/...ResolverActivity"): unknown.
         return component.contains("/") && !component.startsWith("android/") ? packageOf(component) : "";
+    }
+
+    /** Whether Google TV's setup app is one of the home screens (its RecoveryActivity), so it must go off too. */
+    private static boolean setupIsHome(Adb adb) throws IOException {
+        return adb.shell("cmd package query-activities --brief --user 0 -a android.intent.action.MAIN"
+                + " -c android.intent.category.HOME").contains(GOOGLE_SETUP + "/");
     }
 
     /** Apps that saved a Wi-Fi network ("cname" in the Wi-Fi service's list of saved networks). */
