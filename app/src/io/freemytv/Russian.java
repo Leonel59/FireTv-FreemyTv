@@ -92,6 +92,12 @@ final class Russian {
             case "Light": return "Светлая";
             case "Dark": return "Тёмная";
             case "Weather widget": return "Виджет погоды";
+            // What TalkBack reads on the drawer's weather card (#47)
+            case ". High ": return ". Максимум ";
+            case ", low ": return ", минимум ";
+            case " Next hours: ": return " Ближайшие часы: ";
+            case " Sunrise ": return " Восход ";
+            case " Sunset ": return " Закат ";
             case "Quotes widget": return "Виджет котировок";
             case "On": return "Вкл.";
             case "Off": return "Выкл.";

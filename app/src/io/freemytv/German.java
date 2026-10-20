@@ -93,6 +93,12 @@ final class German {
             case "Light": return "Hell";
             case "Dark": return "Dunkel";
             case "Weather widget": return "Wetter-Widget";
+            // What TalkBack reads on the drawer's weather card (#47)
+            case ". High ": return ". Höchstwert ";
+            case ", low ": return ", Tiefstwert ";
+            case " Next hours: ": return " Nächste Stunden: ";
+            case " Sunrise ": return " Sonnenaufgang ";
+            case " Sunset ": return " Sonnenuntergang ";
             case "City": return "Stadt";
             case "Searching…": return "Suche…";
             case "Type the city's name": return "Namen der Stadt eingeben";
