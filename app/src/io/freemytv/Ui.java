@@ -60,9 +60,9 @@ final class Ui {
 
     /** "en"/"pt" in config.properties, or "auto": Portuguese when the TV is set to Portuguese, English otherwise. */
     static boolean english() {
-        String lang = Config.LANGUAGE.trim().toLowerCase(Locale.ROOT);
-        if (lang.startsWith("pt")) return false;
-        if (lang.startsWith("en")) return true;
+        String lang = Prefs.language();
+        if (lang.equals("pt")) return false;
+        if (lang.equals("en")) return true;
         return !"pt".equals(Locale.getDefault().getLanguage());
     }
 

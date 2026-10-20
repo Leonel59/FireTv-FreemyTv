@@ -22,6 +22,9 @@ import android.view.View;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Free My TV's settings (the app's icon, "All Apps", or the gear on the home screen), in the style of Apple TV's
  * settings: the big symbol and title on the left, the list on the right with the focused row in white. "Home screen"
@@ -98,14 +101,19 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, PICKER = 4;
+        private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
+        private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
         private static final int AMBER = 0xFFFFC266, INK = 0xFF1C1C1E;
 
         private final SettingsActivity activity;
         private final Scene scene = new Scene();
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Spring[] pop = new Spring[5];
+        private final Spring[] pop = new Spring[12];
+        // The list picker (the city): what it shows, which one is in use, where we are.
+        private final List<String> pickLabels = new ArrayList<>();
+        private int pickCurrent, pickScroll;
         private final RectF tmp = new RectF(), rowRect = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -204,7 +212,12 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? 3 : 2;
+            switch (screen) {
+                case MAIN: return 4;
+                case HOME_SETTINGS: return settingLabels().length;
+                case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
+                default: return 2;
+            }
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -231,16 +244,17 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 704 * k, version);
 
-            if (screen == MAIN) drawMain(c, seconds); else drawChoice(c);
+            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else drawList(c);
         }
 
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
-            String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), ""};
-            for (int i = 0; i < 3; i++) {
+            String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"),
+                    Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Ajustes da TV", "TV Settings")};
+            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", ""};
+            for (int i = 0; i < 4; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -267,7 +281,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 3 * (ROW_H + ROW_GAP) + 46) * k;
+            float y = (LIST_TOP + 4 * (ROW_H + ROW_GAP) + 40) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -419,14 +433,20 @@ public class SettingsActivity extends Activity {
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     if (down && focus > 0) focus--;
+                    else if (down && scrolling() && pickScroll > 0) pickScroll--;
                     invalidate();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                     if (down && focus < rowCount() - 1) focus++;
+                    else if (down && scrolling() && pickScroll + rowCount() < listSize()) pickScroll++;
                     invalidate();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (down && screen == HOME_SETTINGS) {
+                        adjust(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                        invalidate();
+                    }
                     return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
                 case KeyEvent.KEYCODE_ENTER:
@@ -444,8 +464,13 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            screen = MAIN;
-                            focus = 0;
+                            if (screen == PICKER) {
+                                focus = 1;
+                                screen = HOME_SETTINGS;
+                            } else {
+                                focus = screen == HOME_SETTINGS ? 2 : 0;
+                                screen = MAIN;
+                            }
                         }
                         backDown = false;
                     }
@@ -454,6 +479,149 @@ public class SettingsActivity extends Activity {
                 default:
                     return false;
             }
+        }
+
+        // MARK: - Home Settings
+
+        private static final String[] LANGUAGES = {"auto", "pt", "en"}, UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
+
+        private boolean dollar() {
+            return "BRL".equalsIgnoreCase(Config.CURRENCY.trim());
+        }
+
+        private String[] settingLabels() {
+            List<String> l = new ArrayList<>();
+            l.add(Ui.tr("Idioma", "Language"));
+            l.add(Ui.tr("Cidade", "City"));
+            l.add(Ui.tr("Temperatura", "Temperature"));
+            l.add(Ui.tr("Tema", "Theme"));
+            l.add(Ui.tr("Widget do clima", "Weather widget"));
+            l.add(Ui.tr("Widget de cotações", "Quotes widget"));
+            l.add("Bitcoin");
+            l.add("Ethereum");
+            l.add("Solana");
+            if (dollar()) l.add(Ui.tr("Dólar", "Dollar"));
+            return l.toArray(new String[0]);
+        }
+
+        private String[] settingValues() {
+            String[] labels = settingLabels();
+            String[] v = new String[labels.length];
+            String lang = Prefs.language();
+            v[0] = lang.equals("pt") ? "Português" : lang.equals("en") ? "English" : Ui.tr("Automático", "Automatic");
+            int city = Prefs.cityIndex();
+            v[1] = city >= 0 ? Prefs.CITIES[city][0] : Prefs.city();
+            String unit = Prefs.temperature();
+            v[2] = unit.equals("C") ? "°C" : unit.equals("F") ? "°F" : Ui.tr("Automática", "Automatic");
+            String theme = Prefs.theme();
+            v[3] = theme.equals("light") ? Ui.tr("Claro", "Light") : theme.equals("dark") ? Ui.tr("Escuro", "Dark") : Ui.tr("Automático", "Automatic");
+            v[4] = onOff(Prefs.weather());
+            v[5] = onOff(Prefs.quotes());
+            // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
+            for (int i = 6; i < v.length; i++) v[i] = onOff(Prefs.quotes() && Prefs.coin(i - 6));
+            return v;
+        }
+
+        private static String onOff(boolean on) {
+            return on ? Ui.tr("Ligado", "On") : Ui.tr("Desligado", "Off");
+        }
+
+        /** Changes the focused row's value one step (OK and → go forward, ← goes back). */
+        private void adjust(int dir) {
+            switch (focus) {
+                case 0: {
+                    int at = java.util.Arrays.asList(LANGUAGES).indexOf(Prefs.language());
+                    Prefs.setLanguage(LANGUAGES[(at + dir + LANGUAGES.length) % LANGUAGES.length]);
+                    break;
+                }
+                case 1: {
+                    int n = Prefs.CITIES.length, at = Prefs.cityIndex();
+                    Prefs.setCity(at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n);
+                    break;
+                }
+                case 2: {
+                    int at = java.util.Arrays.asList(UNITS).indexOf(Prefs.temperature());
+                    Prefs.setTemperature(UNITS[(at + dir + UNITS.length) % UNITS.length]);
+                    break;
+                }
+                case 3: {
+                    int at = java.util.Arrays.asList(THEMES).indexOf(Prefs.theme());
+                    Prefs.setTheme(THEMES[(at + dir + THEMES.length) % THEMES.length]);
+                    break;
+                }
+                case 4: Prefs.setWeather(!Prefs.weather()); break;
+                case 5: Prefs.setQuotes(!Prefs.quotes()); break;
+                default:
+                    if (!Prefs.quotes()) return;
+                    Prefs.setCoin(focus - 6, !Prefs.coin(focus - 6));
+                    break;
+            }
+            HomeData.get(getContext()).settingsChanged();
+        }
+
+        private boolean scrolling() {
+            return screen == PICKER;
+        }
+
+        private int listSize() {
+            return pickLabels.size();
+        }
+
+        private void openPicker() {
+            pickLabels.clear();
+            for (String[] city : Prefs.CITIES) pickLabels.add(city[0]);
+            pickCurrent = Prefs.cityIndex();
+            int visible = Math.min(PICK_VISIBLE, pickLabels.size());
+            int at = Math.max(0, pickCurrent);
+            pickScroll = Math.max(0, Math.min(at - 3, pickLabels.size() - visible));
+            focus = at - pickScroll;
+            screen = PICKER;
+        }
+
+        /** A long list (the cities): nine rows at a time, the one in use checked. */
+        private void drawPicker(Canvas c) {
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            c.drawText(Ui.tr("Cidade", "City"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            int rows = rowCount();
+            for (int i = 0; i < rows; i++) {
+                int at = pickScroll + i;
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                c.drawText(pickLabels.get(at), rowRect.left + 30 * k, rowRect.centerY() + Ui.halfCap(rowLabel), rowLabel);
+                if (at == pickCurrent) {
+                    float cw = Symbols.width(getContext(), "check", 26 * k);
+                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(0xFFFFFFFF, INK, f));
+                }
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
+            float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            c.drawText((pickScroll + focus + 1) + " / " + pickLabels.size() + "  ·  " + Ui.tr("OK escolhe, Voltar cancela.", "OK picks, Back cancels."),
+                    LIST_X * k + 30 * k, hy, hint);
+        }
+
+        private void drawList(Canvas c) {
+            String[] labels = settingLabels();
+            String[] values = settingValues();
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            c.drawText(Ui.tr("Ajustes do Início", "Home Settings"),
+                    LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            for (int i = 0; i < labels.length; i++) {
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                boolean locked = i >= 6 && !Prefs.quotes();
+                rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
+                if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                c.drawText(values[i], rowRect.right - 30 * k, base, rowValue);
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
+            float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            c.drawText(Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value."), LIST_X * k + 30 * k, hy, hint);
         }
 
         private void activate() {
@@ -466,6 +634,18 @@ public class SettingsActivity extends Activity {
                 }
                 screen = MAIN;
                 focus = 0;
+            } else if (screen == PICKER) {
+                int at = pickScroll + focus;
+                Prefs.setCity(at);
+                HomeData.get(c).settingsChanged();
+                focus = 1;
+                screen = HOME_SETTINGS;
+            } else if (screen == HOME_SETTINGS && focus == 1) {
+                openPicker();
+            } else if (screen == HOME_SETTINGS) {
+                adjust(1);
+                invalidate();
+                return;
             } else if (focus == 0) {
                 if (busy()) return;
                 screen = HOME_CHOICE;
@@ -473,6 +653,9 @@ public class SettingsActivity extends Activity {
             } else if (focus == 1) {
                 pause();
                 activity.showPreview();
+            } else if (focus == 2) {
+                screen = HOME_SETTINGS;
+                focus = 0;
             } else {
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }

@@ -955,7 +955,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (showInfo()) {
             info = 26 * k + capsuleText.measureText(clockText);
             HomeData.Weather wx = data.weather;
-            if (!Double.isNaN(wx.temp)) {
+            if (!Double.isNaN(wx.temp) && Prefs.weather()) {
                 info += 22 * k + Symbols.width(getContext(), Symbols.weather(wx.code, wx.isDay), 24 * k) + 8 * k
                         + capsuleText.measureText(HomeData.degrees(wx.temp));
             }
@@ -1039,17 +1039,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float base = (L_TABBAR_TOP + L_TABBAR_H / 2) * k + Ui.halfCap(text);
         float cap = Ui.cap(text), gap = 6 * k, spacing = 24 * k;
         int n = HomeData.coinCount();
+        if (n == 0) { text.setColor(textColor); return; }
+        int[] coins = HomeData.active();
         String[] values = new String[n];
         float[] glyphs = new float[n];
         float total = spacing * (n - 1);
         for (int i = 0; i < n; i++) {
-            values[i] = HomeData.compact(data.prices[i]);
-            glyphs[i] = Glyphs.width(getContext(), HomeData.COINS[i], cap);
+            values[i] = HomeData.compact(data.prices[coins[i]]);
+            glyphs[i] = Glyphs.width(getContext(), HomeData.COINS[coins[i]], cap);
             total += glyphs[i] + gap + text.measureText(values[i]);
         }
         float x = right - total;
         for (int i = 0; i < n; i++) {
-            Glyphs.coin(getContext(), c, HomeData.COINS[i], x + glyphs[i] / 2, base - cap / 2, cap,
+            Glyphs.coin(getContext(), c, HomeData.COINS[coins[i]], x + glyphs[i] / 2, base - cap / 2, cap,
                     Ui.alpha(tone(0xB38E8E93, 0x8CFFFFFF), fade));
             x += glyphs[i] + gap;
             c.drawText(values[i], x, base, text);
@@ -1223,8 +1225,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x += tw + gap;
         }
         float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
-        weatherCard.set(left, cardsTop, split - 16 * k, cardsTop + CARDS_H * k);
-        quotesCard.set(split + 16 * k, cardsTop, right, cardsTop + CARDS_H * k);
+        boolean wx = Prefs.weather(), qt = Prefs.quotes() && HomeData.active().length > 0;
+        // A card that is off gives its room to the other one.
+        weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
+        quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
         drawerDirty = true;
     }
 
@@ -1286,8 +1290,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (drawerFocus[i].value > 0.02f && (top < 0 || drawerFocus[i].value > drawerFocus[top].value)) top = i;
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
-        drawWeatherCard(c, weatherCard);
-        drawQuotesCard(c, quotesCard);
+        if (Prefs.weather()) drawWeatherCard(c, weatherCard);
+        if (Prefs.quotes() && HomeData.active().length > 0) drawQuotesCard(c, quotesCard);
     }
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
@@ -1327,7 +1331,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawWeatherCard(Canvas c, RectF r) {
         drawerCard(c, r);
         float x = r.left + 34 * k;
-        c.drawText(Config.CITY.trim().isEmpty() ? Ui.tr("Clima", "Weather") : Config.CITY.trim(), x, r.top + 54 * k, cardTitle);
+        c.drawText(Prefs.city().isEmpty() ? Ui.tr("Clima", "Weather") : Prefs.city(), x, r.top + 54 * k, cardTitle);
         HomeData.Weather wx = data.weather;
         if (Double.isNaN(wx.temp)) {
             c.drawText(Ui.tr("Sem dados do clima agora.", "No weather data right now."), x, r.top + 120 * k, cardDim);
@@ -1372,11 +1376,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
         c.drawText(stale.isEmpty() ? Ui.tr("variação em 24 h", "24h change") : Ui.tr("de ", "") + stale, right, r.top + 54 * k, cardDimRight);
         float cap = Ui.cap(cardText);
-        for (int i = 0; i < HomeData.coinCount(); i++) {
-            float base = r.top + (110 + 52 * i) * k, mid = base - cap / 2;
+        int[] coins = HomeData.active();
+        for (int j = 0; j < coins.length; j++) {
+            int i = coins[j];
+            float base = r.top + (110 + 52 * j) * k, mid = base - cap / 2;
             float gw = Glyphs.width(getContext(), HomeData.COINS[i], cap);
             Glyphs.coin(getContext(), c, HomeData.COINS[i], x + 14 * k, mid, cap, tone(L_DIM, 0xCCFFFFFF));
-            c.drawText(HomeData.COIN_NAMES[i], x + Math.max(gw, 28 * k) / 2 + 30 * k, base, cardText);
+            c.drawText(HomeData.coinName(i), x + Math.max(gw, 28 * k) / 2 + 30 * k, base, cardText);
             c.drawText(HomeData.brl(data.prices[i]), right - 128 * k, base, pricePaint);
             double change = data.changes[i];
             if (Double.isNaN(change)) continue;

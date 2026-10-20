@@ -34,10 +34,16 @@ final class HomeData {
     private static final String CURRENCY = Config.CURRENCY.trim().toUpperCase(Locale.ROOT);
     /** Binance quotes dollars as USDT. */
     private static final String QUOTE = CURRENCY.equals("USD") ? "USDT" : CURRENCY;
-    private static final String WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=" + Config.LATITUDE
-            + "&longitude=" + Config.LONGITUDE
-            + "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
+    private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
+
+    private static String weatherPlace() {
+        return Prefs.latitude() + "," + Prefs.longitude();
+    }
+
+    private static String weatherUrl() {
+        return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
+    }
     private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
     private static final Locale PT = new Locale("pt", "BR");
 
@@ -45,7 +51,29 @@ final class HomeData {
 
     /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
     static int coinCount() {
-        return CURRENCY.equals("BRL") ? COINS.length : 3;
+        return Prefs.quotes() ? active().length : 0;
+    }
+
+    private static volatile int[] activeCoins;
+    private static volatile int activeVersion = -1;
+
+    /** Indexes in COINS of the coins the user has on (and that Binance lists in this currency). */
+    static int[] active() {
+        int[] a = activeCoins;
+        if (a != null && activeVersion == Prefs.version) return a;
+        int n = 0;
+        int[] tmp = new int[COINS.length];
+        for (int i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || CURRENCY.equals("BRL"))) tmp[n++] = i;
+        a = java.util.Arrays.copyOf(tmp, n);
+        activeCoins = a;
+        activeVersion = Prefs.version;
+        return a;
+    }
+
+    /** Settings changed (city, coins): fetch again now. */
+    void settingsChanged() {
+        pricesAt = 0;
+        weatherAt = 0;
     }
 
     static String coinName(int i) {
@@ -54,7 +82,8 @@ final class HomeData {
 
     private static String pricesUrl() {
         StringBuilder symbols = new StringBuilder();
-        for (int i = 0; i < coinCount(); i++) symbols.append(i == 0 ? "" : ",").append("%22").append(COINS[i]).append(QUOTE).append("%22");
+        int[] coins = active();
+        for (int i = 0; i < coins.length; i++) symbols.append(i == 0 ? "" : ",").append("%22").append(COINS[coins[i]]).append(QUOTE).append("%22");
         return "https://api.binance.com/api/v3/ticker/24hr?type=MINI&symbols=%5B" + symbols + "%5D";
     }
 
@@ -96,8 +125,11 @@ final class HomeData {
             if (p != null) parsePrices(p);
             pricesAt = cache.getLong("pricesAt", 0);
             String w = cache.getString("weather", null);
-            if (w != null) weather = parseWeather(w);
-            weatherAt = cache.getLong("weatherAt", 0);
+            // The cached forecast is for the city it was fetched for; another city means fetch again.
+            if (w != null && weatherPlace().equals(cache.getString("weatherPlace", ""))) {
+                weather = parseWeather(w);
+                weatherAt = cache.getLong("weatherAt", 0);
+            }
         } catch (Exception ignored) {}
     }
 
@@ -108,7 +140,7 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
+        if (!fetchingPrices && active().length > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
@@ -128,10 +160,10 @@ final class HomeData {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
-                    String body = get(WEATHER_URL);
+                    String body = get(weatherUrl());
                     weather = parseWeather(body);
                     weatherAt = System.currentTimeMillis();
-                    cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).apply();
+                    cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).putString("weatherPlace", weatherPlace()).apply();
                     notifyListeners();
                 } catch (Exception e) {
                     AppLog.w("weather: " + e.getMessage());
@@ -227,6 +259,9 @@ final class HomeData {
      * Uses the last weather fetched (it moves ~1 min a day); without data, 6:00 and 18:00.
      */
     boolean isNight(long now) {
+        String theme = Prefs.theme();
+        if (theme.equals("dark")) return true;
+        if (theme.equals("light")) return false;
         long t = Shaders.timeOfDay(now, 0);
         long rise = Shaders.timeOfDay(weather.sunrise, 6 * 60 * 60_000L);
         long set = Shaders.timeOfDay(weather.sunset, 18 * 60 * 60_000L);
@@ -308,9 +343,9 @@ final class HomeData {
     }
 
     private static boolean fahrenheit() {
-        String unit = Config.TEMPERATURE.trim().toUpperCase(Locale.ROOT);
-        if (unit.startsWith("F")) return true;
-        if (unit.startsWith("C")) return false;
+        String unit = Prefs.temperature();
+        if (unit.equals("F")) return true;
+        if (unit.equals("C")) return false;
         return "US".equals(Locale.getDefault().getCountry());
     }
 
