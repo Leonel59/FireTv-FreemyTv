@@ -31,6 +31,8 @@ final class Scene {
     private final Paint flatRim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fallback = new Paint();
     private final RenderNode auroraNode = new RenderNode("aurora");
+    // The layer is drawn at a quarter size and scaled up: filtered, its soft shapes stay soft instead of stepping.
+    private final Paint layerPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private int w = 1, h = 1, lw = 1, lh = 1;
     private float speed = 1, baseDim, dim, time;
     private boolean auroraDirty = true, imageFrost, imageGlass;
@@ -51,7 +53,7 @@ final class Scene {
             glass = null;
             liquid = null;
         }
-        auroraNode.setUseCompositingLayer(true, null);
+        auroraNode.setUseCompositingLayer(true, layerPaint);
         flatRim.setStyle(Paint.Style.STROKE);
         flatRim.setColor(0x33FFFFFF);
         flatRim.setStrokeWidth(1.5f);
