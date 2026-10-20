@@ -504,8 +504,8 @@ final class Recs {
     }
 
     /**
-     * The title's best backdrop: no text written over it (our own text goes on top of it), at the highest resolution
-     * (up to 3840, TMDB's 4K) and, on a tie, the highest rated.
+     * The title's best backdrop: no text written over it (our own text goes on top of it), the closest to 1920 wide
+     * (larger only costs download, disk and decoding) and, on a tie, the highest rated.
      */
     private static String bestBackdrop(JSONObject images) {
         JSONArray list = images == null ? null : images.optJSONArray("backdrops");
@@ -516,7 +516,7 @@ final class Recs {
             if (b == null || b.optString("file_path", "").isEmpty()) continue;
             boolean textless = b.isNull("iso_639_1");
             int width = b.optInt("width");
-            double score = (textless ? 1e7 : 0) + Math.min(width, 3840) * 100 + b.optDouble("vote_average", 0);
+            double score = (textless ? 1e7 : 0) + Math.min(width, 1920) * 100 - Math.max(0, width - 1920) + b.optDouble("vote_average", 0);
             if (score > bestScore) {
                 bestScore = score;
                 best = b.optString("file_path");
@@ -583,6 +583,10 @@ final class Recs {
             byte[] buffer = new byte[16384];
             int n;
             while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+        } catch (IOException e) {
+            //noinspection ResultOfMethodCallIgnored
+            part.delete();
+            throw e;
         } finally {
             c.disconnect();
         }
@@ -622,8 +626,14 @@ final class Recs {
         }
     }
 
+    void trim() {
+        synchronized (images) {
+            images.clear();
+        }
+    }
+
     private static void prune(File dir) {
-        File[] files = dir.listFiles();
+        File[] files = dir.listFiles((d, name) -> !name.endsWith(".part"));
         if (files == null || files.length <= 24) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
         for (int i = 0; i < files.length - 24; i++) {

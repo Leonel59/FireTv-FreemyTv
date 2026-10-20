@@ -72,6 +72,8 @@ final class HomeData {
     void settingsChanged() {
         pricesAt = 0;
         weatherAt = 0;
+        pricesFailedAt = 0;
+        weatherFailedAt = 0;
     }
 
     static String coinName(int i) {
@@ -115,6 +117,7 @@ final class HomeData {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
     private volatile boolean fetchingPrices, fetchingWeather;
+    private volatile long pricesFailedAt, weatherFailedAt;
 
     private HomeData(Context c) {
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
@@ -140,7 +143,7 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
+        if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt) && !failedRecently(pricesFailedAt, now)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
@@ -150,13 +153,14 @@ final class HomeData {
                     cache.edit().putString("prices", body).putLong("pricesAt", pricesAt).apply();
                     notifyListeners();
                 } catch (Exception e) {
+                    pricesFailedAt = System.currentTimeMillis();
                     AppLog.w("prices: " + e.getMessage());
                 } finally {
                     fetchingPrices = false;
                 }
             });
         }
-        if (!fetchingWeather && (now - weatherAt > WEATHER_EVERY || now < weatherAt)) {
+        if (!fetchingWeather && (now - weatherAt > WEATHER_EVERY || now < weatherAt) && !failedRecently(weatherFailedAt, now)) {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
@@ -166,12 +170,17 @@ final class HomeData {
                     cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).putString("weatherPlace", weatherPlace()).apply();
                     notifyListeners();
                 } catch (Exception e) {
+                    weatherFailedAt = System.currentTimeMillis();
                     AppLog.w("weather: " + e.getMessage());
                 } finally {
                     fetchingWeather = false;
                 }
             });
         }
+    }
+
+    private static boolean failedRecently(long at, long now) {
+        return at != 0 && now >= at && now - at < 2 * 60_000L;
     }
 
     private void notifyListeners() {
