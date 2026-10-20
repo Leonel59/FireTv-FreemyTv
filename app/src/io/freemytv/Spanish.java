@@ -87,6 +87,13 @@ final class Spanish {
             case "Light": return "Claro";
             case "Dark": return "Oscuro";
             case "Weather widget": return "Widget del clima";
+            case "City": return "Ciudad";
+            case "Searching…": return "Buscando…";
+            case "Type the city's name": return "Escribe el nombre de la ciudad";
+            case "Search": return "Buscar";
+            case "Cancel": return "Cancelar";
+            case "No city with that name.": return "Ninguna ciudad con ese nombre.";
+            case "Couldn't search now: ": return "No se pudo buscar ahora: ";
             case "Quotes widget": return "Widget de cotizaciones";
             case "On": return "Activado";
             case "Off": return "Desactivado";
