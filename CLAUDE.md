@@ -27,7 +27,8 @@ before you do it, and let them do the taps on the TV.
    Without a key everything works except the picks and the screensaver photos.
 5. **Build:** `./build.sh` → `FreeMyTV.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
 6. **Install:** `adb connect <IP>:5555`. The TV asks *Allow USB debugging?*: tell them to accept and tick *Always
-   allow*. Then `adb install -r FreeMyTV.apk`. On TCL, also `adb shell appops set io.freemytv AUTO_START allow`:
+   allow*. Then `adb install -r FreeMyTV.apk`. On TCL, also `adb shell "appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow"`
+   (some firmware calls the operation `APP_AUTO_START`; this tries both):
    TCL's `TclAppBoot` blocks background jobs by default, so the switch (and the watchdog) never run. The log shows
    `forbid bind service ... ModeJob`.
 7. **Tell them what the switch does** before they make it: the home screen and screensaver change, a short list of
@@ -37,7 +38,10 @@ before you do it, and let them do the taps on the TV.
 8. **They switch on the TV:** *Free My TV* → *Home Screen* → *Free My TV*. The app uses the TV's own ADB on
    127.0.0.1 with its own key, so the TV asks once more to allow debugging. Don't switch modes from the computer.
    If the TV's Wi-Fi was saved during its first setup, the switch stops before changing anything and asks them to
-   forget the network and connect again in Settings (Network & Internet); then the switch goes through.
+   forget the network and connect again in Settings (Network & Internet); then the switch goes through. Saved
+   networks out of range don't show in Settings: find the ones with `cname=com.google.android.tungsten.setupwraith`
+   in `adb shell dumpsys wifi` (each block starts with its `ID:`), and with their OK remove them with
+   `adb shell cmd wifi forget-network <id>`.
 9. **Check:** `adb logcat -s FreeMyTV` shows what the switch did.
 
 ## Adapting it to another TV

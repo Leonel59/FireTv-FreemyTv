@@ -65,7 +65,7 @@ About ten minutes. You need a Google TV or Android TV (Android 12 or newer) and 
    ```
    On TCL TVs, also let it run in the background (TCL blocks it by default, and the switch never starts):
    ```bash
-   adb shell appops set io.freemytv AUTO_START allow
+   adb shell "appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow"
    ```
 5. **On the TV**, open *Free My TV* → *Home Screen* → *Free My TV*.
 
@@ -107,7 +107,7 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - Google Assistant, only with `disable_assistant=true`.
 - On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Free My TV* → *Remote Buttons*; *Original* turns the service off.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.
-- Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first.
+- Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first (saved networks out of range don't show there; Claude Code can remove them).
 
 ## Any TV
 

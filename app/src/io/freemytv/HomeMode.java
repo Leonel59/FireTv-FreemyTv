@@ -177,12 +177,15 @@ final class HomeMode {
             // back. The TV's first setup usually saved the network: then stop here, before anything changes.
             Set<String> owners = wifiOwners(adb);
             if (owners.contains(GOOGLE_SETUP) || owners.contains(packageOf(home))) {
-                throw new IOException(Ui.tr("o Wi-Fi foi salvo pela configuração inicial da TV, e desligar esse app apagaria a rede. "
-                        + "Em Configurações → Rede e Internet, esqueça a rede e conecte de novo; depois tente outra vez.",
-                        "your Wi-Fi was saved by the TV's first setup, and turning that app off would erase it. "
-                        + "In Settings → Network & Internet, forget the network and connect again, then try once more.",
-                        "el Wi-Fi lo guardó la configuración inicial del TV, y desactivar esa app borraría la red. "
-                        + "En Ajustes → Red e Internet, olvida la red y vuelve a conectarte; luego inténtalo otra vez."));
+                throw new IOException(Ui.tr("a configuração inicial da TV salvou o Wi-Fi, e desligá-la apagaria essas redes. "
+                        + "Em Configurações → Rede e Internet, esqueça a rede e conecte de novo (as fora de alcance não aparecem "
+                        + "lá: o Claude Code apaga pelo computador) e tente outra vez.",
+                        "the TV's first setup saved the Wi-Fi, and turning it off would erase those networks. "
+                        + "In Settings → Network & Internet, forget the network and connect again (networks out of range don't "
+                        + "show there: Claude Code can remove them from your computer), then try once more.",
+                        "la configuración inicial del TV guardó el Wi-Fi, y desactivarla borraría esas redes. "
+                        + "En Ajustes → Red e Internet, olvida la red y vuelve a conectarte (las fuera de alcance no aparecen "
+                        + "ahí: Claude Code las borra desde la computadora) y vuelve a intentarlo."));
             }
             if (metrics(latest, ORIGINAL) == null && !home.isEmpty()) {
                 busy(c, Ui.tr("Medindo o Início original…", "Measuring the original home screen…"));

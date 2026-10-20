@@ -16,6 +16,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.Choreographer;
@@ -131,6 +132,8 @@ public class SettingsActivity extends Activity {
         private boolean hasKey;
         private int screen = MAIN, focus;
         private boolean running, okDown, backDown, wasBusy;
+        private StaticLayout errorLayout;   // the last error, wrapped (rebuilt only when it changes)
+        private String errorShown;
         private final Spoken spoken;
         private long startedAt, lastNanos, pendingAt, lastSky;
         private int w, h;
@@ -395,8 +398,18 @@ public class SettingsActivity extends Activity {
                         LIST_X * k + 30 * k, y, warn);
                 y += 46 * k;
             } else if (!working && !error.isEmpty()) {
-                c.drawText(TextUtils.ellipsize(error, new TextPaint(warn), 760 * k, TextUtils.TruncateAt.END).toString(), LIST_X * k + 30 * k, y, warn);
-                y += 46 * k;
+                // The whole message, on up to five lines: some say what to do (the Wi-Fi one, #14).
+                int width = Math.round(760 * k);
+                if (errorLayout == null || !error.equals(errorShown) || errorLayout.getWidth() != width) {
+                    errorShown = error;
+                    errorLayout = StaticLayout.Builder.obtain(error, 0, error.length(), new TextPaint(warn), width)
+                            .setMaxLines(5).setEllipsize(TextUtils.TruncateAt.END).build();
+                }
+                c.save();
+                c.translate(LIST_X * k + 30 * k, y - errorLayout.getLineBaseline(0));
+                errorLayout.draw(c);
+                c.restore();
+                y += errorLayout.getLineBaseline(errorLayout.getLineCount() - 1) - errorLayout.getLineBaseline(0) + 46 * k;
             }
             y = drawComparison(c, y);
             y = drawRecs(c, y + 26 * k);

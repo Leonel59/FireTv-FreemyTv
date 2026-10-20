@@ -241,7 +241,7 @@
             <li><b>Install:</b>
               <div class="code"><code>adb connect 192.168.1.50:5555 &amp;&amp; adb install -r FreeMyTV.apk</code><button class="copy-btn" type="button" aria-label="Copy command">Copy</button></div>
               On TCL TVs, also let it run in the background (TCL blocks it by default):
-              <div class="code"><code>adb shell appops set io.freemytv AUTO_START allow</code><button class="copy-btn" type="button" aria-label="Copy command">Copy</button></div>
+              <div class="code"><code>adb shell &quot;appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow&quot;</code><button class="copy-btn" type="button" aria-label="Copy command">Copy</button></div>
             </li>
             <li><b>On the TV:</b> open <em>Free My TV</em> → <em>Home Screen</em> → <em>Free My TV</em>.</li>
           </ol>
