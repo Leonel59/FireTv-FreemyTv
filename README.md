@@ -139,6 +139,7 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - the stock home screen and screensaver;
   - Google TV's recovery home, Play Games and YouTube Music;
   - on TCL TVs, the TCL Channel, messages, store demo, hotel menu, manuals, mirroring and logging apps;
+  - on Philco TVs, AI PONT (promo channels and app downloads) and the manual;
   - Google Assistant, only with `disable_assistant=true`.
 - On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Free My TV* → *Remote Buttons*; *Original* turns the service off.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.

@@ -102,6 +102,12 @@ final class HomeApps {
             "com.tcl.dashboard",                    // TCL Home
             "com.tcl.ocean.instructions",           // TCL: User Guide
             "com.tcl.guard",                        // TCL: Safety Guard
+            "com.homwee.factory",                   // Philco: factory menu
+            "com.mstar.android.tv.disclaimercustomization",   // Philco: disclaimer
+            "com.homwee.chtvmanager",               // Philco: TV Manager (cleaner)
+            "com.homwee.multiscreenshare",          // Philco: Midiacast (Chromecast still works)
+            "com.google.android.videos",            // Google Play Movies (discontinued)
+            "com.disney.starplus",                  // Star+ (merged into Disney+)
             "com.tcl.exhibit"));                    // TCL: T-Exhibition
 
     private static final Map<String, Bitmap> TILES = new HashMap<>();   // key → ready card
