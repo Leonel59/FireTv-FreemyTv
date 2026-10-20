@@ -12,6 +12,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.widget.Button;
+import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +35,8 @@ final class Spoken extends AccessibilityNodeProvider {
         void focus(int id);
         /** OK on this item (TalkBack's click). */
         void click(int id);
+        /** False for what is only there to be read (a widget): TalkBack reads it, the remote's focus doesn't go there. */
+        default boolean actionable(int id) { return true; }
     }
 
     /** TalkBack's click and the remote's OK can both arrive for one press: only the first counts. */
@@ -95,10 +98,10 @@ final class Spoken extends AccessibilityNodeProvider {
         }
         String text = source.text(id);
         if (text.isEmpty() || !source.bounds(id, bounds)) return null;
-        boolean focused = id == source.focused();
+        boolean actionable = source.actionable(id), focused = actionable && id == source.focused();
         AccessibilityNodeInfo info = AccessibilityNodeInfo.obtain(host, id);
         info.setPackageName(host.getContext().getPackageName());
-        info.setClassName(Button.class.getName());
+        info.setClassName(actionable ? Button.class.getName() : TextView.class.getName());
         info.setParent(host);
         info.setText(text);
         info.setBoundsInParent(bounds);
@@ -108,11 +111,11 @@ final class Spoken extends AccessibilityNodeProvider {
         info.setEnabled(true);
         info.setVisibleToUser(true);
         info.setImportantForAccessibility(true);
-        info.setFocusable(true);
+        info.setFocusable(actionable);
         info.setFocused(focused);
-        info.setClickable(true);
-        info.addAction(AccessibilityAction.ACTION_CLICK);
-        if (!focused) info.addAction(AccessibilityAction.ACTION_FOCUS);
+        info.setClickable(actionable);
+        if (actionable) info.addAction(AccessibilityAction.ACTION_CLICK);
+        if (actionable && !focused) info.addAction(AccessibilityAction.ACTION_FOCUS);
         info.setAccessibilityFocused(id == accessibilityFocused);
         info.addAction(id == accessibilityFocused ? AccessibilityAction.ACTION_CLEAR_ACCESSIBILITY_FOCUS
                 : AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS);
@@ -121,11 +124,13 @@ final class Spoken extends AccessibilityNodeProvider {
 
     @Override public boolean performAction(int id, int action, Bundle arguments) {
         if (id == HOST_VIEW_ID) return host.performAccessibilityAction(action, arguments);
+        boolean actionable = source.actionable(id);
+        if (!actionable && (action == AccessibilityNodeInfo.ACTION_FOCUS || action == AccessibilityNodeInfo.ACTION_CLICK)) return false;
         switch (action) {
             case AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS:
                 if (accessibilityFocused == id) return false;
                 accessibilityFocused = id;
-                follow(id);
+                if (actionable) follow(id);
                 send(id, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED);
                 return true;
             case AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS:
