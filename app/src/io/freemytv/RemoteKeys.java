@@ -16,6 +16,9 @@ import android.view.KeyEvent;
 final class RemoteKeys {
     private RemoteKeys() {}
 
+    /** Some TCL remotes (BT_RC833) send TCL's own YouTube key instead of BUTTON_3: the same button. */
+    private static final int KEY_YOUTUBE_TCL = 4065;
+
     /** The key codes are TCL's: on other brands they can be other buttons, so nothing here runs there. */
     static boolean supported() {
         return "TCL".equalsIgnoreCase(Build.MANUFACTURER) || "TCL".equalsIgnoreCase(Build.BRAND);
@@ -28,10 +31,11 @@ final class RemoteKeys {
         int source = e.getSource();
         if ((source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
                 || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return false;
+        int keyCode = e.getKeyCode() == KEY_YOUTUBE_TCL ? Prefs.KEY_YOUTUBE : e.getKeyCode();
         boolean ours = false;
-        for (int key : Prefs.KEYS) ours |= key == e.getKeyCode();
+        for (int key : Prefs.KEYS) ours |= key == keyCode;
         if (!ours) return false;
-        String pkg = Prefs.keyApp(e.getKeyCode());
+        String pkg = Prefs.keyApp(keyCode);
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
             Intent intent = launchIntent(c.getPackageManager(), pkg);
