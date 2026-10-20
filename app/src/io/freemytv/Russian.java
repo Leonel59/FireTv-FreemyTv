@@ -98,6 +98,13 @@ final class Russian {
             case " Next hours: ": return " Ближайшие часы: ";
             case " Sunrise ": return " Восход ";
             case " Sunset ": return " Закат ";
+            case "City": return "Город";
+            case "Searching…": return "Поиск…";
+            case "Type the city's name": return "Введите название города";
+            case "Search": return "Найти";
+            case "Cancel": return "Отмена";
+            case "No city with that name.": return "Город с таким названием не найден.";
+            case "Couldn't search now: ": return "Не удалось выполнить поиск: ";
             case "Quotes widget": return "Виджет котировок";
             case "On": return "Вкл.";
             case "Off": return "Выкл.";
