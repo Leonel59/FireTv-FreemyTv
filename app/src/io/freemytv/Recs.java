@@ -58,6 +58,7 @@ final class Recs {
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
     static final String[] PERIOD_LABEL_ES = {"PARA ESTA MAÑANA", "PARA ESTA TARDE", "PARA ESTA NOCHE"};
+    static final String[] PERIOD_LABEL_DE = {"HEUTE MORGEN", "HEUTE NACHMITTAG", "HEUTE ABEND"};
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
         {"netflix", "netflix", "com.netflix.ninja"},
@@ -152,7 +153,7 @@ final class Recs {
     String error() { return error; }
 
     static String periodLabel() {
-        return (Ui.es ? PERIOD_LABEL_ES : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)[period(System.currentTimeMillis())];
+        return (Ui.es ? PERIOD_LABEL_ES : Ui.de ? PERIOD_LABEL_DE : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)[period(System.currentTimeMillis())];
     }
 
     private static int period(long now) {
@@ -421,6 +422,7 @@ final class Recs {
     /** Language of titles and genres; the services come from the region. */
     private static String lang() {
         if (Ui.es) return "ES".equals(java.util.Locale.getDefault().getCountry()) ? "es-ES" : "es-MX";
+        if (Ui.de) return "de-DE";   // TMDB's de-AT and de-CH have few translations of their own
         return Ui.en ? "en-US" : "pt-BR";
     }
 
@@ -469,6 +471,7 @@ final class Recs {
         } else {
             int seasons = o.optInt("number_of_seasons");
             if (seasons > 0 && Ui.en) parts.add(seasons == 1 ? "1 season" : seasons + " seasons");
+            else if (seasons > 0 && Ui.de) parts.add(seasons == 1 ? "1 Staffel" : seasons + " Staffeln");
             else if (seasons > 0) parts.add(seasons == 1 ? "1 temporada" : seasons + " temporadas");
         }
         JSONObject wp = o.optJSONObject("watch/providers");
@@ -497,9 +500,13 @@ final class Recs {
         {"War & Politics", "Guerra y Política"}, {"Kids", "Infantil"}, {"News", "Noticias"},
         {"Soap", "Telenovela"}, {"Talk", "Entrevistas"},
     };
+    private static final String[][] GENRES_DE = {
+        {"Action & Adventure", "Action & Abenteuer"}, {"War & Politics", "Krieg & Politik"}, {"Kids", "Kinder"},
+        {"News", "Nachrichten"}, {"Soap", "Seifenoper"}, {"Talk", "Talkshow"},
+    };
 
     private static String genre(String name) {
-        for (String[] g : Ui.es ? GENRES_ES : GENRES_PT) if (g[0].equalsIgnoreCase(name)) return g[1];
+        for (String[] g : Ui.es ? GENRES_ES : Ui.de ? GENRES_DE : GENRES_PT) if (g[0].equalsIgnoreCase(name)) return g[1];
         return name;
     }
 

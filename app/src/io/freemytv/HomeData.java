@@ -358,6 +358,18 @@ final class HomeData {
             if (code >= 95) return "Tormenta";
             return "Lluvia";
         }
+        if (Ui.de) {
+            if (code == 0) return day ? "Sonnig" : "Klar";
+            if (code == 1) return day ? "Überwiegend sonnig" : "Überwiegend klar";
+            if (code == 2) return "Teilweise bewölkt";
+            if (code == 3) return "Bewölkt";
+            if (code == 45 || code == 48) return "Nebel";
+            if (code >= 51 && code <= 57) return "Nieselregen";
+            if (code == 65 || code == 67 || code == 82) return "Starker Regen";
+            if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Schnee";
+            if (code >= 95) return "Gewitter";
+            return "Regen";
+        }
         if (code == 0) return day ? "Céu limpo" : "Noite limpa";
         if (code == 1) return "Poucas nuvens";
         if (code == 2) return "Parcialmente nublado";
@@ -402,7 +414,7 @@ final class HomeData {
 
     static String hour(long at) {
         return Ui.once("hour", at, () -> Ui.en ? new SimpleDateFormat("h a", Locale.US).format(new java.util.Date(at))
-                : new SimpleDateFormat(Ui.es ? "HH:mm" : "HH'h'", Ui.locale()).format(new java.util.Date(at)));
+                : new SimpleDateFormat(Ui.es ? "HH:mm" : Ui.de ? "HH 'Uhr'" : "HH'h'", Ui.locale()).format(new java.util.Date(at)));
     }
 
     /** How long ago the data was fetched, if it's stale (no internet): "12 min ago". */
@@ -413,6 +425,7 @@ final class HomeData {
         long minutes = age / 60_000;
         if (Ui.en) return minutes < 60 ? minutes + " min ago" : (minutes / 60) + " h ago";
         if (Ui.es) return minutes < 60 ? "hace " + minutes + " min" : "hace " + (minutes / 60) + " h";
+        if (Ui.de) return minutes < 60 ? "vor " + minutes + " Min." : "vor " + (minutes / 60) + " Std.";
         return minutes < 60 ? "há " + minutes + " min" : "há " + (minutes / 60) + " h";
     }
 }
