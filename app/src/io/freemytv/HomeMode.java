@@ -36,9 +36,13 @@ final class HomeMode {
     static final String PKG = "io.freemytv";
     static final String HOME_ACTIVITY = PKG + "/" + PKG + ".HomeActivity";
     static final String SETTINGS_ACTIVITY = PKG + "/" + PKG + ".SettingsActivity";
-    static final String DREAM = PKG + "/" + PKG + ".Screensaver";
+    /** Our screensaver: on Android 11 the copy that runs in the main process (ScreensaverAlone, #10). */
+    static final String DREAM = PKG + "/" + PKG + (Build.VERSION.SDK_INT == 30 ? ".ScreensaverAlone" : ".Screensaver");
     static final String FREE = "free", ORIGINAL = "original";
 
+    /** Classic Android TV's home screen; its recommendations service crashes on the screensaver while it's off (#11). */
+    static final String TV_LAUNCHER = "com.google.android.tvlauncher";
+    static final String TV_RECOMMENDATIONS = "com.google.android.tvrecommendations";
     /** Google TV's home screen: the fallback when the TV's own one wasn't recorded. */
     static final String GOOGLE_HOME = "com.google.android.apps.tv.launcherx/.home.HomeActivity";
     /**
@@ -73,7 +77,12 @@ final class HomeMode {
         "com.tcl.useragreement", "com.tcl.factory.view", "com.tcl.guard", "com.tcl.t_solo",
         "com.google.android.gms", "com.google.android.gsf", "com.android.vending", "com.google.android.apps.mediashell",
         "com.google.android.tv.remote.service", "com.google.android.inputmethod.latin", "com.google.android.webview",
-        "com.android.tv.settings", "com.android.systemui", "android", PKG));
+        "com.android.tv.settings", "com.android.systemui", "android", PKG,
+        // Philips (TP Vision) and MediaTek: system, Ambilight, live TV and inputs, setup, factory menu (#11)
+        "org.droidtv", "org.droidtv.ambisvc", "org.droidtv.ui.strings", "org.droidtv.tv.packageinfo", "org.droidtv.icp",
+        "org.droidtv.gel", "org.droidtv.eum", "com.mediatek.tv.service", "com.mediatek.tvinput", "com.mediatek.network",
+        "com.mediatek.wwtv.tvcenter", "com.mediatek.wwtv.setupwizard", "com.mediatek.tv.factory",
+        "mediatek.factorymenu.ui", "com.tpv.xmic.ots.cms.client"));
 
     /** One switch at a time (jobs can overlap: a boot check and a button press). */
     private static final Object RUN = new Object();
@@ -392,6 +401,7 @@ final class HomeMode {
         List<String> out = new ArrayList<>();
         String homePkg = packageOf(home);
         if (homePkg != null && !homePkg.equals(PKG)) out.add(homePkg);
+        if (TV_LAUNCHER.equals(homePkg)) out.add(TV_RECOMMENDATIONS);
         if (setupHome) out.add(GOOGLE_SETUP);
         String dreamPkg = packageOf(dream);
         if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
