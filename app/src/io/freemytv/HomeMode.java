@@ -63,6 +63,9 @@ final class HomeMode {
         "com.tcl.messagebox", "com.tcl.usercenter",                                   // TCL messages and account
         "com.tcl.exhibit", "com.tcl.esticker", "com.tcl.hotelmenu",                   // store demo, hotel menu
         "com.tcl.repairguide", "com.tcl.ocean.instructions", "com.tcl.logkit",        // repair guide, manual, logs
+        // Philco (Homwee/Changhong)
+        "com.homwee.aipont",                                                          // AI PONT: promo channels, app downloads
+        "com.homwee.help",                                                            // user manual
     };
 
     /** The voice assistant, only with disable_assistant=true in config.properties (the mic button stops working). */
@@ -82,7 +85,12 @@ final class HomeMode {
         "org.droidtv", "org.droidtv.ambisvc", "org.droidtv.ui.strings", "org.droidtv.tv.packageinfo", "org.droidtv.icp",
         "org.droidtv.gel", "org.droidtv.eum", "com.mediatek.tv.service", "com.mediatek.tvinput", "com.mediatek.network",
         "com.mediatek.wwtv.tvcenter", "com.mediatek.wwtv.setupwizard", "com.mediatek.tv.factory",
-        "mediatek.factorymenu.ui", "com.tpv.xmic.ots.cms.client"));
+        "mediatek.factorymenu.ui", "com.tpv.xmic.ots.cms.client",
+        // Philco (Homwee/Changhong, MediaTek): remote pairing, picture tests, overlays, updates, factory menu
+        "com.mediatek.autopair", "com.mediatek.tv.factorykey", "com.mediatek.testpq", "com.mediatek.overlay.tvcenter",
+        "com.mediatek.overlay.tvsettings", "com.homwee.overlay.tvservice", "com.homwee.synckey", "com.homwee.upgrade",
+        "com.homwee.dmt.upgrade", "com.homwee.factory", "com.homwee.chinstallapk", "com.homwee.chtvmanager",
+        "com.mstar.android.tv.disclaimercustomization"));
 
     /** One switch at a time (jobs can overlap: a boot check and a button press). */
     private static final Object RUN = new Object();
