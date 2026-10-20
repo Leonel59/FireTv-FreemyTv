@@ -312,13 +312,13 @@ final class HomeMode {
         if (home.isEmpty() && adb.shell("pm path " + packageOf(GOOGLE_HOME)).contains("package:")) home = GOOGLE_HOME;
         if (!home.isEmpty()) {
             adb.shell("pm enable " + packageOf(home));
-            if (adb.shell("cmd package set-home-activity " + home).contains("Success")) return true;
+            if (adb.shell("cmd package set-home-activity '" + home + "'").contains("Success")) return true;
         }
         adb.shell("cmd role remove-role-holder --user 0 android.app.role.HOME " + PKG);
         return !homeHolder(adb).contains(PKG);
     }
 
-    /** Safety net: our home screen crashed 3 times in a row. Only the home screen goes back; the rest stays. */
+    /** Safety net: our home screen crashed 3 times in a row. The home screen and the screensaver go back; the rest stays. */
     static void revertHomeNow(Context app) {
         synchronized (RUN) {
             JSONObject s = state(app);
@@ -337,11 +337,12 @@ final class HomeMode {
                 for (String pkg : stringList(s, "disabled")) {
                     if (!pkg.equals(GOOGLE_SETUP) && !pkg.equals(homePkg) && !pkg.equals(dreamPkg)) kept.put(pkg);
                 }
+                // The screensaver first: if that fails, the revert isn't marked done and the next try does it again.
+                restoreScreensaver(adb, s);
                 s.put("homeReverted", true).put("disabled", kept);
                 save(app, s);
                 notice(app, Ui.tr("O Início do Free My TV caiu 3 vezes seguidas; voltei para o Início original.",
                         "Free My TV's home screen crashed 3 times in a row; I switched back to the original one."));
-                restoreScreensaver(adb, s);
                 adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             } catch (Exception e) {
                 AppLog.w("could not give the home screen back: " + e.getMessage());
@@ -490,7 +491,8 @@ final class HomeMode {
         return safeComponent(s.optString("originalDream", ""));
     }
 
-    private static final Pattern COMPONENT = Pattern.compile("[A-Za-z][\\w.]*/[\\w.]+");
+    // Nested classes ("Outer$Inner") are valid; every shell command that takes one quotes it, so $ stays literal.
+    private static final Pattern COMPONENT = Pattern.compile("[A-Za-z][\\w.]*/[\\w.$]+");
 
     private static String safeComponent(String component) {
         return COMPONENT.matcher(component).matches() ? component : "";
@@ -506,7 +508,7 @@ final class HomeMode {
     private static void restoreScreensaver(Adb adb, JSONObject s) throws IOException {
         String saver = safeComponents(s.optString("originalScreensaver", ""));
         if (saver.isEmpty()) adb.shell("settings delete secure screensaver_components");
-        else adb.shell("settings put secure screensaver_components " + saver);
+        else adb.shell("settings put secure screensaver_components '" + saver + "'");
     }
 
     /** The system's default screensaver ("package/service"), or "". */
