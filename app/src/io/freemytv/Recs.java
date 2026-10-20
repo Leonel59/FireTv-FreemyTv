@@ -502,8 +502,9 @@ final class Recs {
     private String title(Pick p, JSONObject o) {
         String field = p.kind.equals("movie") ? "title" : "name";
         String own = o.optString(field, p.title);
+        String original = o.optString("original_language");
         if (Ui.en || own.isEmpty() || !own.equals(o.optString("original_" + field))
-                || Ui.language.equals(o.optString("original_language"))) return own;
+                || Ui.language.equals(original) || "en".equals(original)) return own;
         try {
             String english = get("/" + p.kind + "/" + p.id + "?language=en-US").optString(field);
             return english.isEmpty() ? own : english;

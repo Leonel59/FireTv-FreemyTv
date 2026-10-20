@@ -342,7 +342,8 @@ var Data = (function () {
   function title(p, o, done) {
     var field = p.kind === 'movie' ? 'title' : 'name', own = o[field] || p.title;
     p.title = own;
-    if (I18N.lang === 'en' || !own || own !== o['original_' + field] || o.original_language === I18N.lang) { done(); return; }
+    if (I18N.lang === 'en' || !own || own !== o['original_' + field] || o.original_language === I18N.lang
+        || o.original_language === 'en') { done(); return; }
     tmdb('/' + p.kind + '/' + p.id + '?language=en-US', function (err, en) {
       if (!err && en && en[field]) p.title = en[field];
       done();
