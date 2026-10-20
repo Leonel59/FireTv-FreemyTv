@@ -246,8 +246,7 @@ final class HomeData {
     }
 
     static List<String[]> findCity(String name) throws Exception {
-        String lang = Ui.en ? "en" : Ui.es ? "es" : "pt";
-        JSONObject o = new JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?count=10&format=json&language=" + lang
+        JSONObject o = new JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?count=10&format=json&language=" + Ui.language
                 + "&name=" + URLEncoder.encode(name.trim(), "UTF-8")));
         JSONArray results = o.optJSONArray("results");
         List<String[]> out = new ArrayList<>();
