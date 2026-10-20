@@ -412,7 +412,8 @@ final class HomeMode {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("o Início", "the home screen"));
                 }
-                if (!reverted && !adb.shell("settings get secure screensaver_components").contains(DREAM)) {
+                // Whole component names: ".ScreensaverAlone" (Android 11) contains ".Screensaver" (12 and newer).
+                if (!reverted && !Arrays.asList(adb.shell("settings get secure screensaver_components").trim().split(",")).contains(DREAM)) {
                     adb.shell("settings put secure screensaver_components " + DREAM);
                     fixed.add(Ui.tr("a tela de descanso", "the screensaver"));
                 }
