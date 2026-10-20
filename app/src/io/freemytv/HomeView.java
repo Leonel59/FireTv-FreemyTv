@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.media.tv.TvInputManager;
@@ -23,6 +24,7 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -97,6 +99,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final SharedPreferences ui;
     private final TvInputManager tvInputs;
+    private final Spoken spoken = new Spoken(this, new Spoken.Source() {
+        @Override public void items(List<Integer> out) { a11yItems(out); }
+        @Override public String text(int id) { return a11yText(id); }
+        @Override public boolean bounds(int id, Rect out) { return a11yBounds(id, out); }
+        @Override public int focused() { return a11yFocused(); }
+        @Override public void focus(int id) { a11yFocus(id); }
+        @Override public void click(int id) { activate(); }
+    });
+    private final RectF a11yRect = new RectF();
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer;
     private int zone = Z_SHELF;
 
@@ -294,7 +305,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         toastLayer = new Layer(a, TOAST);
         // Hardware layers on the GPU: only the one that changed is redrawn; moving, fading and scaling stay cheap.
         for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer}) v.setLayerType(LAYER_TYPE_HARDWARE, null);
-        for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer}) addView(v);
+        for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer}) {
+            v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);   // TalkBack reads the items (Spoken)
+            addView(v);
+        }
+        setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < 6; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
@@ -340,6 +355,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         motionDirty = true;
         invalidateAll();
         Choreographer.getInstance().postFrameCallback(this);
+        spoken.readAgain();
     }
 
     void pause() {
@@ -705,6 +721,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         refreshHero(true);
         Backdrop b = recs.backdrop(currentPick());
         if (b != null) showBackdrop(b);
+        spoken.focusMoved();
         return true;
     }
 
@@ -1408,6 +1425,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         statusDirty |= snap || statusChanged;
         heroDirty |= snap || heroChanged;
         drawerDirty |= snap || drawerChanged;
+        spoken.focusMoved();
     }
 
     /** Aims a group's springs (only `focused` at 1); returns true if any target changed. */
@@ -1463,6 +1481,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         else if (r > target + visible - 1) target = r - visible + 1;
         scroll.target = Math.max(0, Math.min(rows - visible, target));
         if (snap) scroll.snap(scroll.target);
+        spoken.focusMoved();
     }
 
     private void drawSheet(Canvas c) {
@@ -1536,6 +1555,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     void showToast(String text) {
         toasts.add(text);
+        announceForAccessibility(text);
     }
 
     /** Advances the toast queue; returns true while a toast fades in or out (animation). */
@@ -1649,7 +1669,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (down) {
                     if (e.getRepeatCount() == 0) okDown = true;
                 } else {
-                    if (okDown && !e.isCanceled()) activate();
+                    if (okDown && !e.isCanceled() && spoken.keyClick()) activate();
                     okDown = false;
                 }
                 return true;
@@ -1841,6 +1861,160 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (!opened) showToast(Ui.tr("Não deu para abrir ", "Couldn't open ") + it.label + ".");
     }
 
+    // MARK: - TalkBack: every reachable item as a virtual node (Spoken). Id = group * 1000 + index + 1.
+
+    private static final int GRID = 9;
+
+    private static int a11yId(int group, int index) {
+        return group * 1000 + index + 1;
+    }
+
+    @Override public AccessibilityNodeProvider getAccessibilityNodeProvider() {
+        return spoken;
+    }
+
+    private void a11yItems(List<Integer> out) {
+        if (sheetOpen) {
+            for (int i = 0; i < others.size(); i++) out.add(a11yId(GRID, i));
+            return;
+        }
+        for (int i = 0; i < 3 + lightButtons.size(); i++) out.add(a11yId(Z_TOP, i));
+        for (int i = 0; i < Math.min(3, cards.size()); i++) out.add(a11yId(Z_CARDS, i));
+        for (int i = 0; i < shelf.size(); i++) out.add(a11yId(Z_SHELF, i));
+        for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
+    }
+
+    private String a11yText(int id) {
+        int group = (id - 1) / 1000, i = (id - 1) % 1000;
+        switch (group) {
+            case GRID:
+                if (i >= others.size()) return "";
+                return label(others, i) + ", " + (i + 1) + Ui.tr(" de ", " of ") + others.size();
+            case Z_TOP:
+                if (i >= 3) return label(lightButtons, i - 3);
+                return tabs()[i] + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3");
+            case Z_CARDS: return i < cards.size() ? pickText(cards.get(i)) : "";
+            case Z_SHELF: return label(shelf, i);
+            case Z_DRAWER: return label(drawerItems, i);
+            default: return "";
+        }
+    }
+
+    /**
+     * Where the item is now. Items off screen (the closed drawer, the sheet's hidden rows, the top while the drawer is
+     * open) get a thin strip at that edge, so TalkBack's arrows can still reach them; going there brings them in.
+     */
+    private boolean a11yBounds(int id, Rect out) {
+        int group = (id - 1) / 1000, i = (id - 1) % 1000;
+        float dy;
+        switch (group) {
+            case GRID: {
+                if (!sheetOpen || i >= others.size()) return false;
+                float gridWidth = COLUMNS * GRID_W + (COLUMNS - 1) * GRID_GAP;
+                float x = ((1920 - gridWidth) / 2 + (i % COLUMNS) * (GRID_W + GRID_GAP)) * k;
+                float y = (GRID_TOP + (i / COLUMNS - scroll.target) * GRID_ROW) * k;
+                a11yRect.set(x, y, x + GRID_W * k, y + GRID_H * k);
+                dy = 0;
+                break;
+            }
+            case Z_TOP:
+                if (i >= 3 + lightButtons.size()) return false;
+                a11yRect.set(topRects[i]);
+                dy = (i < 3 ? heroLayer : status).getTranslationY();
+                break;
+            case Z_CARDS:
+                if (i >= Math.min(3, cards.size())) return false;
+                a11yRect.set(cardRects[i]);
+                dy = heroLayer.getTranslationY();
+                break;
+            case Z_SHELF:
+                if (i >= tileRects.length) return false;
+                a11yRect.set(tileRects[i]);
+                dy = tiles.getTranslationY();
+                break;
+            case Z_DRAWER:
+                if (i >= drawerRects.length) return false;
+                a11yRect.set(drawerRects[i]);
+                dy = drawerOpen ? 0 : h;
+                break;
+            default:
+                return false;
+        }
+        a11yRect.offset(0, dy);
+        float edge = 24 * k;
+        if (a11yRect.top >= h - edge) a11yRect.set(a11yRect.left, h - edge, a11yRect.right, h);
+        else if (a11yRect.bottom <= edge) a11yRect.set(a11yRect.left, 0, a11yRect.right, edge);
+        a11yRect.round(out);
+        return out.width() > 0 && out.height() > 0;
+    }
+
+    private int a11yFocused() {
+        if (sheetOpen) return others.isEmpty() ? -1 : a11yId(GRID, gridIndex);
+        switch (zone) {
+            case Z_TOP: return a11yId(Z_TOP, topIndex);
+            case Z_CARDS: return cardIndex < cards.size() ? a11yId(Z_CARDS, cardIndex) : -1;
+            case Z_SHELF: return shelf.isEmpty() ? -1 : a11yId(Z_SHELF, shelfIndex);
+            case Z_DRAWER: return drawerItems.isEmpty() ? -1 : a11yId(Z_DRAWER, drawerIndex);
+            default: return -1;
+        }
+    }
+
+    /** TalkBack moved to an item: the remote's focus goes there (opening or closing the drawer on the way). */
+    private void a11yFocus(int id) {
+        int group = (id - 1) / 1000, i = (id - 1) % 1000;
+        if (group == GRID) {
+            if (!sheetOpen || i >= others.size()) return;
+            gridIndex = i;
+            retargetGrid(false);
+            gridDirty = true;
+            click.move();
+            return;
+        }
+        if (sheetOpen) return;
+        switch (group) {
+            case Z_DRAWER:
+                if (i >= drawerItems.size()) return;
+                if (!drawerOpen) openDrawer();
+                drawerIndex = i;
+                break;
+            case Z_TOP:
+                if (i >= 3 + lightButtons.size()) return;
+                if (drawerOpen) closeDrawer();
+                topIndex = i;
+                if (i < 3) selectTab(i);
+                break;
+            case Z_CARDS:
+                if (i >= cards.size()) return;
+                if (drawerOpen) closeDrawer();
+                cardIndex = i;
+                break;
+            case Z_SHELF:
+                if (i >= shelf.size()) return;
+                if (drawerOpen) closeDrawer();
+                shelfIndex = i;
+                break;
+            default:
+                return;
+        }
+        zone = group;
+        retarget(false);
+        click.move();
+    }
+
+    private static String label(List<HomeApps.Item> list, int i) {
+        return i >= 0 && i < list.size() && list.get(i).label != null ? list.get(i).label : "";
+    }
+
+    /** A recommendation: title, details and the app that plays it. */
+    private static String pickText(Recs.Pick p) {
+        if (p == null) return "";
+        StringBuilder s = new StringBuilder(p.title == null ? "" : p.title);
+        if (p.meta != null && !p.meta.isEmpty()) s.append(", ").append(p.meta);
+        String app = Recs.serviceName(p);
+        if (app != null && !app.isEmpty()) s.append(". App: ").append(app);
+        return s.toString();
+    }
+
     // MARK: - Light design: title, tabs, cards and icon-only buttons
 
     private void layoutLight() {
@@ -1881,6 +2055,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
+        spoken.focusMoved();    // new picks under the focused card
     }
 
     private void selectTab(int index) {
