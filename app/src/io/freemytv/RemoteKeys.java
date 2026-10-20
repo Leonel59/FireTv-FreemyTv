@@ -2,6 +2,7 @@ package io.freemytv;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -33,10 +34,16 @@ final class RemoteKeys {
         String pkg = Prefs.keyApp(e.getKeyCode());
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
-            Intent intent = HomeApps.launchIntent(c.getPackageManager(), pkg);
+            Intent intent = launchIntent(c.getPackageManager(), pkg);
             AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
             if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         }
         return true;
+    }
+
+    /** The app's TV launcher, or its plain one (kept here, not in HomeApps, so the key process stays small). */
+    private static Intent launchIntent(PackageManager pm, String pkg) {
+        Intent intent = pm.getLeanbackLaunchIntentForPackage(pkg);
+        return intent != null ? intent : pm.getLaunchIntentForPackage(pkg);
     }
 }
