@@ -14,10 +14,10 @@ final class Russian {
     static String text(String english) {
         switch (english) {
             case "Live TV": return "Телеканалы";
-            case "All Apps": return "Все приложения";
+            case "All Apps": return "Приложения";
             case "Settings": return "Настройки";
-            case "Home Settings": return "Настройки экрана";
-            case "TV Settings": return "Настройки телевизора";
+            case "Home Settings": return "Главный экран";
+            case "TV Settings": return "Настройки ТВ";
             case "HDMI Inputs": return "Входы HDMI";
             case "Inputs": return "Входы";
             case "Shortcuts": return "Ярлыки";

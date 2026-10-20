@@ -8,10 +8,10 @@ var I18N = (function () {
   var lang = 'en';
   var russian = {
     "Live TV": "Телеканалы",
-    "All Apps": "Все приложения",
+    "All Apps": "Приложения",
     "Settings": "Настройки",
-    "Home Settings": "Настройки экрана",
-    "TV Settings": "Настройки телевизора",
+    "Home Settings": "Главный экран",
+    "TV Settings": "Настройки ТВ",
     "HDMI Inputs": "Входы HDMI",
     "Inputs": "Входы",
     "Shortcuts": "Ярлыки",
