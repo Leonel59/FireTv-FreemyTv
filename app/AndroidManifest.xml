@@ -123,10 +123,11 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
-        <!-- The remote's app buttons from inside any app (Settings > Remote Buttons). Same process as the settings. -->
+        <!-- The remote's app buttons from inside any app (Settings > Remote Buttons). Its own process: the system waits for it on
+             every key, so the home screen must never be able to slow it down. -->
         <service
             android:name=".RemoteKeyService"
-            android:process=":home"
+            android:process=":keys"
             android:exported="true"
             android:label="Free My TV"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

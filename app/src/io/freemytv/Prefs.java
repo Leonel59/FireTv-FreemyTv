@@ -3,6 +3,12 @@ package io.freemytv;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +31,7 @@ final class Prefs {
 
     static void init(Context c) {
         app = c.getApplicationContext();
+        migrateKeys();   // before anything reads the button choices
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
     }
 
@@ -115,7 +122,50 @@ final class Prefs {
         }
     }
 
+    // The key service runs in its own small process (:keys), so that a busy home screen can never delay the TV's keys.
+    // SharedPreferences are not shared between processes, so these few values live in a tiny file both processes read.
+    private static File keysFile() {
+        return new File(app.getFilesDir(), "remote-keys.txt");
+    }
+
+    /** Choices saved before they moved to the file (in SharedPreferences) are copied there once. */
+    private static void migrateKeys() {
+        if (keysFile().exists()) return;
+        SharedPreferences old = sp();
+        boolean any = false;
+        for (int key : KEYS) any |= old.contains("key" + key);
+        if (!any) return;
+        StringBuilder sb = new StringBuilder();
+        for (int key : KEYS) sb.append(key).append('=').append(old.getString("key" + key, defaultApp(key))).append('\n');
+        File tmp = new File(app.getFilesDir(), "remote-keys.txt.tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            return;
+        }
+        //noinspection ResultOfMethodCallIgnored
+        tmp.renameTo(keysFile());
+    }
+
     /** Package the key opens ("" = nothing). */
-    static String keyApp(int keyCode) { return sp().getString("key" + keyCode, defaultApp(keyCode)); }
-    static void setKeyApp(int keyCode, String pkg) { put("key" + keyCode, pkg); }
+    static String keyApp(int keyCode) {
+        try (BufferedReader r = new BufferedReader(new FileReader(keysFile()))) {
+            String prefix = keyCode + "=", line;
+            while ((line = r.readLine()) != null) if (line.startsWith(prefix)) return line.substring(prefix.length());
+        } catch (IOException ignored) {
+        }
+        return defaultApp(keyCode);
+    }
+
+    static void setKeyApp(int keyCode, String pkg) {
+        StringBuilder sb = new StringBuilder();
+        for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
+        File tmp = new File(app.getFilesDir(), "remote-keys.txt.tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            return;
+        }
+        if (tmp.renameTo(keysFile())) version++;
+    }
 }
