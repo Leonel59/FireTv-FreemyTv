@@ -492,15 +492,6 @@ final class Recs {
         return name;
     }
 
-    /** The same for lists saved earlier ("Série · Action & Adventure · …" in Portuguese). */
-    private static String fixGenres(String meta) {
-        for (String[] g : GENRES_PT) {
-            meta = meta.replace(" · " + g[0] + " ·", " · " + g[1] + " ·");
-            if (meta.endsWith(" · " + g[0])) meta = meta.substring(0, meta.length() - g[0].length()) + g[1];
-        }
-        return meta;
-    }
-
     /**
      * The title's best backdrop: no text written over it (our own text goes on top of it), at the highest resolution
      * (up to 3840, TMDB's 4K) and, on a tie, the highest rated.
