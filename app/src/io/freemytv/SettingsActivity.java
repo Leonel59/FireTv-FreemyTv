@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Handler;
@@ -18,9 +19,12 @@ import android.text.TextUtils;
 import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.accessibility.AccessibilityNodeProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.List;
 
 /**
  * Free My TV's settings (the app's icon, "All Apps", or the gear on the home screen), in the style of Apple TV's
@@ -106,11 +110,12 @@ public class SettingsActivity extends Activity {
         private final Scene scene = new Scene();
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final Spring[] pop = new Spring[5];
-        private final RectF tmp = new RectF(), rowRect = new RectF();
+        private final RectF tmp = new RectF(), rowRect = new RectF(), focusBox = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
         private int screen = MAIN, focus;
-        private boolean running, okDown, backDown;
+        private boolean running, okDown, backDown, wasBusy;
+        private final Spoken spoken;
         private long startedAt, lastNanos, pendingAt, lastSky;
         private int w, h;
         private float k = 1;
@@ -123,7 +128,15 @@ public class SettingsActivity extends Activity {
                 state = HomeMode.state(getContext());
                 hasKey = Recs.hasKey(getContext());
                 recs = Recs.status(getContext());
-                if (!state.optString("busy").isEmpty()) pendingAt = 0;
+                boolean nowBusy = !state.optString("busy").isEmpty();
+                if (nowBusy) pendingAt = 0;
+                // A switch just ended: TalkBack reads how it went (the newest notice).
+                JSONArray notices = state.optJSONArray("notices");
+                if (wasBusy && !nowBusy && notices != null && notices.length() > 0) {
+                    JSONObject newest = notices.optJSONObject(0);
+                    if (newest != null) announceForAccessibility(newest.optString("text"));
+                }
+                wasBusy = nowBusy;
                 invalidate();
                 handler.postDelayed(this, 500);
             }
@@ -138,6 +151,51 @@ public class SettingsActivity extends Activity {
             scene.setMotion(0.5f, 0.2f);
             scene.applyPalette();
             setFocusable(true);
+            setContentDescription("Free My TV");
+            // TalkBack: one item per row, id = row + 1.
+            spoken = new Spoken(this, new Spoken.Source() {
+                @Override public void items(List<Integer> out) { for (int i = 1; i <= rowCount(); i++) out.add(i); }
+                @Override public String text(int id) { return id >= 1 && id <= rowCount() ? rowText(id - 1) : ""; }
+                @Override public boolean bounds(int id, Rect out) {
+                    if (id < 1 || id > rowCount()) return false;
+                    rowBox(id - 1).round(out);
+                    return true;
+                }
+                @Override public int focused() { return focus + 1; }
+                @Override public void focus(int id) {
+                    focus = id - 1;
+                    invalidate();
+                }
+                @Override public void click(int id) { activate(); }
+            });
+        }
+
+        @Override public AccessibilityNodeProvider getAccessibilityNodeProvider() {
+            return spoken;
+        }
+
+        /** A row as TalkBack reads it: its name and its value. */
+        private String rowText(int row) {
+            if (screen == MAIN) {
+                if (row == 0) {
+                    String busyText = state.optString("busy");
+                    String value = busy() ? (busyText.isEmpty() ? Ui.tr("Começando…", "Starting…") : busyText)
+                            : freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
+                    return Ui.tr("Início, ", "Home Screen, ") + value;
+                }
+                return row == 1 ? Ui.tr("Tela de Descanso, ver agora", "Screensaver, preview") : Ui.tr("Ajustes da TV", "TV Settings");
+            }
+            String name = row == 0 ? "Free My TV, " + Ui.tr("sem anúncios, com a tela de descanso nova", "no ads, with the new screensaver")
+                    : "Original, " + Ui.tr("o Início de fábrica da TV", "the TV's factory home screen");
+            boolean inUse = (row == 0) == freeActive();
+            return name + (inUse ? Ui.tr(". Em uso", ". In use") : "") + ", " + (row + 1) + Ui.tr(" de 2", " of 2");
+        }
+
+        private RectF rowBox(int row) {
+            float top = screen == MAIN ? LIST_TOP + row * (ROW_H + ROW_GAP) : LIST_TOP + 20 + row * (CHOICE_H + ROW_GAP);
+            float height = screen == MAIN ? ROW_H : CHOICE_H;
+            focusBox.set(LIST_X * k, top * k, LIST_R * k, (top + height) * k);
+            return focusBox;
         }
 
         void resume() {
@@ -147,6 +205,7 @@ public class SettingsActivity extends Activity {
             lastNanos = 0;
             handler.post(poll);
             Choreographer.getInstance().postFrameCallback(this);
+            spoken.readAgain();
         }
 
         void pause() {
@@ -420,10 +479,12 @@ public class SettingsActivity extends Activity {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     if (down && focus > 0) focus--;
                     invalidate();
+                    spoken.focusMoved();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                     if (down && focus < rowCount() - 1) focus++;
                     invalidate();
+                    spoken.focusMoved();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
@@ -434,7 +495,7 @@ public class SettingsActivity extends Activity {
                     if (down) {
                         if (e.getRepeatCount() == 0) okDown = true;
                     } else {
-                        if (okDown && !e.isCanceled()) activate();
+                        if (okDown && !e.isCanceled() && spoken.keyClick()) activate();
                         okDown = false;
                     }
                     return true;
@@ -450,6 +511,7 @@ public class SettingsActivity extends Activity {
                         backDown = false;
                     }
                     invalidate();
+                    spoken.focusMoved();
                     return true;
                 default:
                     return false;
@@ -478,6 +540,7 @@ public class SettingsActivity extends Activity {
             }
             for (Spring s : pop) s.snap(0);
             invalidate();
+            spoken.focusMoved();
         }
     }
 }
