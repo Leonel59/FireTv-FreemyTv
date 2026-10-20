@@ -627,12 +627,22 @@ final class Recs {
     }
 
     void trim() {
+        // Explore's picks stay: the home screen opens on that tab, so its cards are never gray when you come back.
+        java.util.Set<String> keep = new java.util.HashSet<>();
+        for (Pick p : now(null)) if (p.backdrop != null) keep.add(p.backdrop);
         synchronized (images) {
-            images.clear();
+            images.keySet().retainAll(keep);
         }
     }
 
     private static void prune(File dir) {
+        // A download cut off when the system stopped the app leaves its .part behind.
+        long stale = System.currentTimeMillis() - 10 * 60_000L;
+        File[] parts = dir.listFiles((d, name) -> name.endsWith(".part"));
+        for (int i = 0; parts != null && i < parts.length; i++) {
+            //noinspection ResultOfMethodCallIgnored
+            if (parts[i].lastModified() < stale) parts[i].delete();
+        }
         File[] files = dir.listFiles((d, name) -> !name.endsWith(".part"));
         if (files == null || files.length <= 24) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
