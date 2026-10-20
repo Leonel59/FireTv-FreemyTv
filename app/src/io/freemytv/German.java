@@ -23,6 +23,9 @@ final class German {
             case "For You": return "Für dich";
             case "Couldn't open ": return "Konnte nicht öffnen: ";
             case " of ": return " von ";
+            case "← → to move · OK to drop · Back to cancel": return "← → verschieben · OK ablegen · Zurück abbrechen";
+            case "Moving ": return "Verschiebe ";
+            case ", position ": return ", Position ";
             case ", tab ": return ", Tab ";
             case " of 3": return " von 3";
             case "Dollar": return "Dollar";
