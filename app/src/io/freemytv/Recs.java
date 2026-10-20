@@ -56,8 +56,10 @@ final class Recs {
     private static final int CACHE_VERSION = 3;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
+    static final String[] PERIOD_LABEL_RU = {"ЭТИМ УТРОМ", "СЕГОДНЯ ДНЁМ", "СЕГОДНЯ ВЕЧЕРОМ"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
     static final String[] PERIOD_LABEL_ES = {"PARA ESTA MAÑANA", "PARA ESTA TARDE", "PARA ESTA NOCHE"};
+    static final String[] PERIOD_LABEL_DE = {"HEUTE MORGEN", "HEUTE NACHMITTAG", "HEUTE ABEND"};
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
         {"netflix", "netflix", "com.netflix.ninja"},
@@ -152,7 +154,8 @@ final class Recs {
     String error() { return error; }
 
     static String periodLabel() {
-        return (Ui.es ? PERIOD_LABEL_ES : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)[period(System.currentTimeMillis())];
+        return (Ui.ru ? PERIOD_LABEL_RU : Ui.es ? PERIOD_LABEL_ES : Ui.de ? PERIOD_LABEL_DE : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)
+                [period(System.currentTimeMillis())];
     }
 
     private static int period(long now) {
@@ -420,7 +423,9 @@ final class Recs {
 
     /** Language of titles and genres; the services come from the region. */
     private static String lang() {
+        if (Ui.ru) return "ru-RU";
         if (Ui.es) return "ES".equals(java.util.Locale.getDefault().getCountry()) ? "es-ES" : "es-MX";
+        if (Ui.de) return "de-DE";   // TMDB's de-AT and de-CH have few translations of their own
         return Ui.en ? "en-US" : "pt-BR";
     }
 
@@ -464,11 +469,14 @@ final class Recs {
         }
         if (p.kind.equals("movie")) {
             int minutes = o.optInt("runtime");
-            if (minutes > 0 && Ui.en) parts.add(minutes >= 60 ? (minutes / 60) + "h " + (minutes % 60) + "m" : minutes + "m");
+            if (minutes > 0 && Ui.ru) parts.add(minutes >= 60 ? (minutes / 60) + " ч " + (minutes % 60) + " мин" : minutes + " мин");
+            else if (minutes > 0 && Ui.en) parts.add(minutes >= 60 ? (minutes / 60) + "h " + (minutes % 60) + "m" : minutes + "m");
             else if (minutes > 0) parts.add(minutes >= 60 ? (minutes / 60) + " h " + (minutes % 60) + " min" : minutes + " min");
         } else {
             int seasons = o.optInt("number_of_seasons");
-            if (seasons > 0 && Ui.en) parts.add(seasons == 1 ? "1 season" : seasons + " seasons");
+            if (seasons > 0 && Ui.ru) parts.add(Russian.count(seasons, "сезон", "сезона", "сезонов"));
+            else if (seasons > 0 && Ui.en) parts.add(seasons == 1 ? "1 season" : seasons + " seasons");
+            else if (seasons > 0 && Ui.de) parts.add(seasons == 1 ? "1 Staffel" : seasons + " Staffeln");
             else if (seasons > 0) parts.add(seasons == 1 ? "1 temporada" : seasons + " temporadas");
         }
         JSONObject wp = o.optJSONObject("watch/providers");
@@ -497,15 +505,20 @@ final class Recs {
         {"War & Politics", "Guerra y Política"}, {"Kids", "Infantil"}, {"News", "Noticias"},
         {"Soap", "Telenovela"}, {"Talk", "Entrevistas"},
     };
+    private static final String[][] GENRES_DE = {
+        {"Action & Adventure", "Action & Abenteuer"}, {"War & Politics", "Krieg & Politik"}, {"Kids", "Kinder"},
+        {"News", "Nachrichten"}, {"Soap", "Seifenoper"}, {"Talk", "Talkshow"},
+    };
 
     private static String genre(String name) {
-        for (String[] g : Ui.es ? GENRES_ES : GENRES_PT) if (g[0].equalsIgnoreCase(name)) return g[1];
+        if (Ui.ru) return Russian.text(name);
+        for (String[] g : Ui.es ? GENRES_ES : Ui.de ? GENRES_DE : GENRES_PT) if (g[0].equalsIgnoreCase(name)) return g[1];
         return name;
     }
 
     /**
-     * The title's best backdrop: no text written over it (our own text goes on top of it), at the highest resolution
-     * (up to 3840, TMDB's 4K) and, on a tie, the highest rated.
+     * The title's best backdrop: no text written over it (our own text goes on top of it), the closest to 1920 wide
+     * (larger only costs download, disk and decoding) and, on a tie, the highest rated.
      */
     private static String bestBackdrop(JSONObject images) {
         JSONArray list = images == null ? null : images.optJSONArray("backdrops");
@@ -516,7 +529,7 @@ final class Recs {
             if (b == null || b.optString("file_path", "").isEmpty()) continue;
             boolean textless = b.isNull("iso_639_1");
             int width = b.optInt("width");
-            double score = (textless ? 1e7 : 0) + Math.min(width, 3840) * 100 + b.optDouble("vote_average", 0);
+            double score = (textless ? 1e7 : 0) + Math.min(width, 1920) * 100 - Math.max(0, width - 1920) + b.optDouble("vote_average", 0);
             if (score > bestScore) {
                 bestScore = score;
                 best = b.optString("file_path");
@@ -583,6 +596,10 @@ final class Recs {
             byte[] buffer = new byte[16384];
             int n;
             while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+        } catch (IOException e) {
+            //noinspection ResultOfMethodCallIgnored
+            part.delete();
+            throw e;
         } finally {
             c.disconnect();
         }
@@ -622,8 +639,24 @@ final class Recs {
         }
     }
 
+    void trim() {
+        // Explore's picks stay: the home screen opens on that tab, so its cards are never gray when you come back.
+        java.util.Set<String> keep = new java.util.HashSet<>();
+        for (Pick p : now(null)) if (p.backdrop != null) keep.add(p.backdrop);
+        synchronized (images) {
+            images.keySet().retainAll(keep);
+        }
+    }
+
     private static void prune(File dir) {
-        File[] files = dir.listFiles();
+        // A download cut off when the system stopped the app leaves its .part behind.
+        long stale = System.currentTimeMillis() - 10 * 60_000L;
+        File[] parts = dir.listFiles((d, name) -> name.endsWith(".part"));
+        for (int i = 0; parts != null && i < parts.length; i++) {
+            //noinspection ResultOfMethodCallIgnored
+            if (parts[i].lastModified() < stale) parts[i].delete();
+        }
+        File[] files = dir.listFiles((d, name) -> !name.endsWith(".part"));
         if (files == null || files.length <= 24) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
         for (int i = 0; i < files.length - 24; i++) {

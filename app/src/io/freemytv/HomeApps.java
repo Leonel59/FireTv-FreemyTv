@@ -102,6 +102,12 @@ final class HomeApps {
             "com.tcl.dashboard",                    // TCL Home
             "com.tcl.ocean.instructions",           // TCL: User Guide
             "com.tcl.guard",                        // TCL: Safety Guard
+            "com.homwee.factory",                   // Philco: factory menu
+            "com.mstar.android.tv.disclaimercustomization",   // Philco: disclaimer
+            "com.homwee.chtvmanager",               // Philco: TV Manager (cleaner)
+            "com.homwee.multiscreenshare",          // Philco: Midiacast (Chromecast still works)
+            "com.google.android.videos",            // Google Play Movies (discontinued)
+            "com.disney.starplus",                  // Star+ (merged into Disney+)
             "com.tcl.exhibit"));                    // TCL: T-Exhibition
 
     private static final Map<String, Bitmap> TILES = new HashMap<>();   // key → ready card
@@ -131,8 +137,8 @@ final class HomeApps {
             } else {
                 it.key = d[0];
                 it.label = d[1];
-                it.tile = appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16));
                 it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
+                if (it.logo == null) it.tile = appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16));
                 if (it.logo != null) it.logoInk = ink(it.logo);
                 it.logoDark = ownLogoCached(c, d[0] + "-dark");
                 it.logoScale = Float.parseFloat(d[5]);
@@ -336,6 +342,9 @@ final class HomeApps {
             items.add(it);
         }
         Collections.sort(items, (a, b) -> a.label.toLowerCase(Locale.ROOT).compareTo(b.label.toLowerCase(Locale.ROOT)));
+        synchronized (HomeApps.class) {
+            TILES.keySet().removeIf(k -> k.contains(".") && !seen.contains(k));
+        }
         items.add(special(c, SETTINGS, "freemytv-settings", "Free My TV", "sparkles"));
         return items;
     }
@@ -475,6 +484,14 @@ final class HomeApps {
         File dir = file.getParentFile();
         //noinspection ResultOfMethodCallIgnored
         dir.mkdirs();
+        String key = file.getName().substring(0, file.getName().lastIndexOf('-', file.getName().lastIndexOf("-v") - 1));
+        File[] old = dir.listFiles((d, name) -> name.matches(java.util.regex.Pattern.quote(key) + "-\\d+-v\\d+\\.png(\\.none)?"));
+        if (old != null) {
+            for (File f : old) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
         try (FileOutputStream out = new FileOutputStream(logo != null ? file : none)) {
             if (logo != null) logo.compress(Bitmap.CompressFormat.PNG, 100, out);
         } catch (IOException e) {

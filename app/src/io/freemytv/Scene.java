@@ -36,8 +36,14 @@ final class Scene {
     private boolean auroraDirty = true, imageFrost, imageGlass;
     private Bitmap frostImage, glassA, glassB;
     private BitmapShader glassShaderA;
+    private final boolean withGlass;
 
     Scene() {
+        this(true);
+    }
+
+    Scene(boolean withGlass) {
+        this.withGlass = withGlass;
         try {
             aurora = new RuntimeShader(Shaders.AURORA);
             glass = new RuntimeShader(Shaders.GLASS);
@@ -99,7 +105,7 @@ final class Scene {
         time = seconds;
         if (aurora == null) return;
         aurora.setFloatUniform("t", seconds);
-        if (!imageFrost || !imageGlass) {
+        if (withGlass && (!imageFrost || !imageGlass)) {
             BitmapShader s = frost.render(seconds, speed, dim, palette.c, (float) w / h);
             if (!imageFrost) glass.setInputShader("frost", s);
             if (!imageGlass) {

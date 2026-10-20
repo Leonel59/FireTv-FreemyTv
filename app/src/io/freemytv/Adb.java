@@ -74,8 +74,14 @@ final class Adb implements Closeable {
             s.close();
             throw new IOException("debugging is off on the TV (port 5555 closed)");
         }
-        s.setSoTimeout(10_000);
-        Adb adb = new Adb(s);
+        Adb adb;
+        try {
+            s.setSoTimeout(10_000);
+            adb = new Adb(s);
+        } catch (IOException | RuntimeException e) {
+            s.close();
+            throw e;
+        }
         try {
             adb.send(CNXN, VERSION, MAX_DATA, "host::\0".getBytes(StandardCharsets.US_ASCII));
             boolean signed = false, offeredKey = false;
@@ -105,7 +111,7 @@ final class Adb implements Closeable {
                     throw new IOException("the TV rejected the app's key");
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             adb.close();
             throw e;
         }
