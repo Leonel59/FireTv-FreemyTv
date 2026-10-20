@@ -129,8 +129,26 @@ final class Prefs {
 
     // The key service runs in its own small process (:keys), so that a busy home screen can never delay the TV's keys.
     // SharedPreferences are not shared between processes, so these few values live in a tiny file both processes read.
+    // The service asks on every key: the values stay in memory and the file is read again only when it changes.
     private static File keysFile() {
         return new File(app.getFilesDir(), "remote-keys.txt");
+    }
+
+    private static final String[] keyApps = new String[KEYS.length];   // null = the default
+    private static long keysStamp = Long.MIN_VALUE;
+
+    /** A temporary file per process (two can start together after an update), synced before it replaces the old one. */
+    private static boolean writeKeys(String text) {
+        File tmp = new File(app.getFilesDir(), "remote-keys." + android.os.Process.myPid() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            out.write(text.getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
+        } catch (IOException e) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            return false;
+        }
+        return tmp.renameTo(keysFile());
     }
 
     /** Choices saved before they moved to the file (in SharedPreferences) are copied there once. */
@@ -142,35 +160,38 @@ final class Prefs {
         if (!any) return;
         StringBuilder sb = new StringBuilder();
         for (int key : KEYS) sb.append(key).append('=').append(old.getString("key" + key, defaultApp(key))).append('\n');
-        File tmp = new File(app.getFilesDir(), "remote-keys.txt.tmp");
-        try (FileOutputStream out = new FileOutputStream(tmp)) {
-            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            return;
-        }
-        //noinspection ResultOfMethodCallIgnored
-        tmp.renameTo(keysFile());
+        writeKeys(sb.toString());
     }
 
     /** Package the key opens ("" = nothing). */
     static String keyApp(int keyCode) {
-        try (BufferedReader r = new BufferedReader(new FileReader(keysFile()))) {
-            String prefix = keyCode + "=", line;
-            while ((line = r.readLine()) != null) if (line.startsWith(prefix)) return line.substring(prefix.length());
-        } catch (IOException ignored) {
+        synchronized (keyApps) {
+            File f = keysFile();
+            long stamp = f.lastModified() * 31 + f.length();   // 0 without the file: every key opens its default
+            if (stamp != keysStamp) {
+                keysStamp = stamp;
+                java.util.Arrays.fill(keyApps, null);
+                if (stamp != 0) {
+                    try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+                        String line;
+                        while ((line = r.readLine()) != null) {
+                            for (int i = 0; i < KEYS.length; i++) {
+                                String prefix = KEYS[i] + "=";
+                                if (line.startsWith(prefix)) keyApps[i] = line.substring(prefix.length());
+                            }
+                        }
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+            for (int i = 0; i < KEYS.length; i++) if (KEYS[i] == keyCode && keyApps[i] != null) return keyApps[i];
+            return defaultApp(keyCode);
         }
-        return defaultApp(keyCode);
     }
 
     static void setKeyApp(int keyCode, String pkg) {
         StringBuilder sb = new StringBuilder();
         for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
-        File tmp = new File(app.getFilesDir(), "remote-keys.txt.tmp");
-        try (FileOutputStream out = new FileOutputStream(tmp)) {
-            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            return;
-        }
-        if (tmp.renameTo(keysFile())) version++;
+        if (writeKeys(sb.toString())) version++;
     }
 }
