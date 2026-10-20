@@ -89,6 +89,7 @@ final class HomeApps {
         {"paramount", "Paramount+", "com.cbs.ott", "0064FF", "", "1"},
         {"peacock", "Peacock", "com.peacocktv.peacockandroid", "6E55DC", "", "1"},
         {"globoplay", "Globoplay", "com.globo.globotv", "FF5A1F", "tint", "1"},
+        {"crunchyroll", "Crunchyroll", "com.crunchyroll.crunchyroid", "F47521", "", "1"},
         {"spotify", "Spotify", "com.spotify.tv.android", "1DB954", "", "1"},
     };
     static final int MAX_SHELF = 8;
@@ -102,6 +103,12 @@ final class HomeApps {
             "com.tcl.dashboard",                    // TCL Home
             "com.tcl.ocean.instructions",           // TCL: User Guide
             "com.tcl.guard",                        // TCL: Safety Guard
+            "com.homwee.factory",                   // Philco: factory menu
+            "com.mstar.android.tv.disclaimercustomization",   // Philco: disclaimer
+            "com.homwee.chtvmanager",               // Philco: TV Manager (cleaner)
+            "com.homwee.multiscreenshare",          // Philco: Midiacast (Chromecast still works)
+            "com.google.android.videos",            // Google Play Movies (discontinued)
+            "com.disney.starplus",                  // Star+ (merged into Disney+)
             "com.tcl.exhibit"));                    // TCL: T-Exhibition
 
     private static final Map<String, Bitmap> TILES = new HashMap<>();   // key → ready card
