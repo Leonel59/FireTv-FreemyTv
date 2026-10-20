@@ -27,10 +27,11 @@ final class Ui {
 
     /** Android 9 to 11: older TVs and boxes, whose GPUs need the cheaper drawing paths (Shadows, rounded images). */
     static final boolean LEGACY = Build.VERSION.SDK_INT < 31;
+    static final Locale RU = new Locale("ru", "RU");
     static final Locale PT = new Locale("pt", "BR");
-    /** English, Portuguese or Spanish, from the settings or, with "auto", the TV's own language. */
+    /** English, Portuguese, Spanish or Russian, from the settings or, with "auto", the TV's own language. */
     static volatile String language = language();
-    static volatile boolean en = "en".equals(language), es = "es".equals(language);
+    static volatile boolean en = "en".equals(language), es = "es".equals(language), ru = "ru".equals(language);
     static Typeface thin, light, displayMedium, displaySemibold, regular, medium, semibold;
     private static boolean loaded;
     private static final Rect BOUNDS = new Rect();
@@ -64,12 +65,12 @@ final class Ui {
 
     private static final String FONT = "fonts/InterVariable.ttf";
 
-    /** "pt", "es" or "en": the one picked (TV settings or config.properties), or with "auto" the TV's own, else English. */
+    /** "pt", "es", "ru" or "en": the one picked (TV settings or config.properties), or with "auto" the TV's own, else English. */
     private static String language() {
         String lang = Prefs.language();
         if (!lang.equals("auto")) return lang;
         lang = Locale.getDefault().getLanguage();
-        return "pt".equals(lang) || "es".equals(lang) ? lang : "en";
+        return "pt".equals(lang) || "es".equals(lang) || "ru".equals(lang) ? lang : "en";
     }
 
     /** After the language changes in the settings (and once Prefs can read them). */
@@ -77,6 +78,7 @@ final class Ui {
         language = language();
         en = "en".equals(language);
         es = "es".equals(language);
+        ru = "ru".equals(language);
     }
 
     private static boolean has(AssetManager a, String path) {
@@ -134,15 +136,15 @@ final class Ui {
     }
 
     static String tr(String pt, String english) {
-        return es ? Spanish.text(english) : en ? english : pt;
+        return ru ? Russian.text(english) : es ? Spanish.text(english) : en ? english : pt;
     }
 
     static String tr(String pt, String english, String spanish) {
-        return es ? spanish : en ? english : pt;
+        return ru ? Russian.text(english) : es ? spanish : en ? english : pt;
     }
 
     static Locale locale() {
-        return es ? spanish() : en ? Locale.US : PT;
+        return ru ? RU : es ? spanish() : en ? Locale.US : PT;
     }
 
     /** The TV's own Spanish (es-MX, es-AR…) when it is in Spanish, Spain's otherwise. */
@@ -184,7 +186,8 @@ final class Ui {
 
     /** "domingo, 18 de outubro" (lowercase, like the iPhone in Portuguese); "Sunday, October 18" in English. */
     static String date(long now) {
-        return en ? new SimpleDateFormat("EEEE, MMMM d", Locale.US).format(new Date(now))
+        return ru ? new SimpleDateFormat("EEEE, d MMMM", locale()).format(new Date(now))
+                : en ? new SimpleDateFormat("EEEE, MMMM d", Locale.US).format(new Date(now))
                 : new SimpleDateFormat("EEEE, d 'de' MMMM", locale()).format(new Date(now));
     }
 
