@@ -323,7 +323,9 @@ final class HomeApps {
     static List<Item> others(Context c) {
         PackageManager pm = c.getPackageManager();
         Set<String> skip = new HashSet<>();
-        for (String[] d : SHELF) skip.add(d[2]);
+        // A built-in app is skipped only while it is on the shelf: one the person took off must still be listed here.
+        List<String> onShelf = shelfPackages(c);
+        for (String[] d : SHELF) if (onShelf.contains(d[2])) skip.add(d[2]);
         skip.addAll(java.util.Arrays.asList(LIVE_TV_APPS));
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);
