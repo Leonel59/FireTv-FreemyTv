@@ -453,7 +453,7 @@ public class SettingsActivity extends Activity {
             if (m == null || !m.has(key)) return "—";
             long v = m.optLong(key);
             if (key.equals("homeMs")) return v + " ms";
-            if (key.equals("memAvailableMB") && v >= 1024) return String.format(Ui.en ? java.util.Locale.US : Ui.PT, "%.2f GB", v / 1024.0);
+            if (key.equals("memAvailableMB") && v >= 1024) return String.format(Ui.locale(), "%.2f GB", v / 1024.0);
             return v + " MB";
         }
 

@@ -39,8 +39,6 @@ final class HomeData {
             + "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
     private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
-    private static final Locale PT = new Locale("pt", "BR");
-
     interface Listener { void onData(); }
 
     /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
@@ -238,7 +236,7 @@ final class HomeData {
     // MARK: - Formatting
 
     private static Locale locale() {
-        return Ui.en ? Locale.US : PT;
+        return Ui.locale();
     }
 
     /** 580.4k · 21.0k · 1.04k · 5.61 (as short as possible; the dollar always with cents). */
@@ -279,6 +277,18 @@ final class HomeData {
             if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Snow";
             if (code >= 95) return "Thunderstorms";
             return "Rain";
+        }
+        if (Ui.es) {
+            if (code == 0) return day ? "Despejado" : "Noche despejada";
+            if (code == 1) return "Mayormente despejado";
+            if (code == 2) return "Parcialmente nublado";
+            if (code == 3) return "Nublado";
+            if (code == 45 || code == 48) return "Niebla";
+            if (code >= 51 && code <= 57) return "Llovizna";
+            if (code == 65 || code == 67 || code == 82) return "Lluvia fuerte";
+            if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Nieve";
+            if (code >= 95) return "Tormenta";
+            return "Lluvia";
         }
         if (code == 0) return day ? "Céu limpo" : "Noite limpa";
         if (code == 1) return "Poucas nuvens";
@@ -324,7 +334,7 @@ final class HomeData {
 
     static String hour(long at) {
         return Ui.en ? new SimpleDateFormat("h a", Locale.US).format(new java.util.Date(at))
-                : new SimpleDateFormat("HH'h'", PT).format(new java.util.Date(at));
+                : new SimpleDateFormat(Ui.es ? "HH:mm" : "HH'h'", Ui.locale()).format(new java.util.Date(at));
     }
 
     /** How long ago the data was fetched, if it's stale (no internet): "12 min ago". */
@@ -334,6 +344,7 @@ final class HomeData {
         if (age < every * 2) return "";
         long minutes = age / 60_000;
         if (Ui.en) return minutes < 60 ? minutes + " min ago" : (minutes / 60) + " h ago";
+        if (Ui.es) return minutes < 60 ? "hace " + minutes + " min" : "hace " + (minutes / 60) + " h";
         return minutes < 60 ? "há " + minutes + " min" : "há " + (minutes / 60) + " h";
     }
 }

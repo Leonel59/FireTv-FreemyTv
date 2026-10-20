@@ -88,6 +88,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
     private static final String[] TABS = {"Explorar", "Filmes", "Séries"};
     private static final String[] TABS_EN = {"Explore", "Movies", "Shows"};
+    private static final String[] TABS_ES = {"Explorar", "Películas", "Series"};
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5;
 
@@ -404,7 +405,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private static String[] tabs() {
-        return Ui.en ? TABS_EN : TABS;
+        return Ui.es ? TABS_ES : Ui.en ? TABS_EN : TABS;
     }
 
     @Override public void onData() {
@@ -689,7 +690,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Recs.Pick p = currentPick();
         if (p == null) {
             h.clock = true;
-            h.label = Ui.date(System.currentTimeMillis()).toUpperCase(Ui.en ? java.util.Locale.US : Ui.PT);
+            h.label = Ui.date(System.currentTimeMillis()).toUpperCase(Ui.locale());
             return h;
         }
         h.label = Recs.periodLabel();
@@ -1393,7 +1394,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float x = r.left + 34 * k, right = r.right - 34 * k;
         c.drawText(Ui.tr("Cotações", "Crypto"), x, r.top + 54 * k, cardTitle);
         String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
-        c.drawText(stale.isEmpty() ? Ui.tr("variação em 24 h", "24h change") : Ui.tr("de ", "") + stale, right, r.top + 54 * k, cardDimRight);
+        c.drawText(stale.isEmpty() ? Ui.tr("variação em 24 h", "24h change") : Ui.tr("de ", "", "de ") + stale, right, r.top + 54 * k, cardDimRight);
         float cap = Ui.cap(cardText);
         for (int i = 0; i < HomeData.coinCount(); i++) {
             float base = r.top + (110 + 52 * i) * k, mid = base - cap / 2;
