@@ -106,6 +106,7 @@ final class HomeApps {
             "com.mstar.android.tv.disclaimercustomization",   // Philco: disclaimer
             "com.homwee.chtvmanager",               // Philco: TV Manager (cleaner)
             "com.homwee.multiscreenshare",          // Philco: Midiacast (Chromecast still works)
+            "com.xiaomi.mitv.manualhelp",           // Xiaomi: user manual
             "com.google.android.videos",            // Google Play Movies (discontinued)
             "com.disney.starplus",                  // Star+ (merged into Disney+)
             "com.tcl.exhibit"));                    // TCL: T-Exhibition
