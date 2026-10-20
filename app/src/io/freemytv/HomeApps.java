@@ -91,7 +91,7 @@ final class HomeApps {
         {"globoplay", "Globoplay", "com.globo.globotv", "FF5A1F", "tint", "1"},
         {"spotify", "Spotify", "com.spotify.tv.android", "1DB954", "", "1"},
     };
-    private static final int MAX_SHELF = 8;
+    static final int MAX_SHELF = 8;
     /** Live TV apps of some brands (the antenna's channels open through the standard Android request first). */
     static final String[] LIVE_TV_APPS = {"com.tcl.tv", "com.google.android.tv", "com.mediatek.wwtv.tvcenter", "com.sony.dtv.tvx"};
     /** Kept out of "All Apps" (only hidden, still installed). Add the ones your TV shows that you never use. */
@@ -114,22 +114,65 @@ final class HomeApps {
     static List<Item> shelf(Context c, boolean extract) {
         List<Item> items = new ArrayList<>();
         PackageManager pm = c.getPackageManager();
-        for (String[] d : SHELF) {
+        for (String pkg : shelfPackages(c)) {
             if (items.size() >= MAX_SHELF) break;
-            if (launchIntent(pm, d[2]) == null) continue;
+            Intent launch = launchIntent(pm, pkg);
+            if (launch == null) continue;
+            ResolveInfo ri = pm.resolveActivity(launch, 0);
+            String[] d = known(pkg);
             Item it = new Item();
             it.kind = APP;
-            it.key = d[0];
-            it.label = d[1];
-            it.pkg = d[2];
-            it.tile = appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16));
-            it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
-            if (it.logo != null) it.logoInk = ink(it.logo);
-            it.logoDark = ownLogoCached(c, d[0] + "-dark");
-            it.logoScale = Float.parseFloat(d[5]);
+            it.pkg = pkg;
+            if (d == null) {
+                // An app picked in Settings > Shelf that isn't in SHELF: its own name and TV art.
+                it.key = pkg;
+                it.label = ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
+                it.tile = appTile(c, null, pkg, 0);
+            } else {
+                it.key = d[0];
+                it.label = d[1];
+                it.tile = appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16));
+                it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
+                if (it.logo != null) it.logoInk = ink(it.logo);
+                it.logoDark = ownLogoCached(c, d[0] + "-dark");
+                it.logoScale = Float.parseFloat(d[5]);
+            }
             items.add(it);
         }
         return items;
+    }
+
+    private static String[] known(String pkg) {
+        for (String[] d : SHELF) if (d[2].equals(pkg)) return d;
+        return null;
+    }
+
+    /** The shelf's packages in order: the user's list (Settings > Shelf), or the built-in one. */
+    static List<String> shelfPackages(Context c) {
+        List<String> custom = Prefs.shelf();
+        if (custom != null) return custom;
+        List<String> out = new ArrayList<>();
+        PackageManager pm = c.getPackageManager();
+        for (String[] d : SHELF) if (out.size() < MAX_SHELF && launchIntent(pm, d[2]) != null) out.add(d[2]);
+        return out;
+    }
+
+    /** Every app the shelf could hold, as {package, name}: the ones from SHELF first, then the other TV apps by name. */
+    static List<String[]> shelfCandidates(Context c) {
+        PackageManager pm = c.getPackageManager();
+        List<String[]> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
+        List<String[]> more = new ArrayList<>();
+        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+        for (ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+            String pkg = ri.activityInfo.packageName;
+            if (pkg.equals(c.getPackageName()) || HIDDEN.contains(pkg) || !seen.add(pkg)) continue;
+            more.add(new String[] {pkg, String.valueOf(ri.loadLabel(pm))});
+        }
+        Collections.sort(more, (a, b) -> a[1].toLowerCase(Locale.ROOT).compareTo(b[1].toLowerCase(Locale.ROOT)));
+        out.addAll(more);
+        return out;
     }
 
     /** Live TV, the HDMI inputs with a device sending a signal, and All Apps. */

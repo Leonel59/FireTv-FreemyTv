@@ -31,9 +31,9 @@ before you do it, and let them do the taps on the TV.
    TCL's `TclAppBoot` blocks background jobs by default, so the switch (and the watchdog) never run. The log shows
    `forbid bind service ... ModeJob`.
 7. **Tell them what the switch does** before they make it: the home screen and screensaver change, a short list of
-   promo apps is turned off (never uninstalled), and *Original* brings it all back. On some TVs the remote's
-   shortcut buttons belong to the stock home screen (TCL: Netflix, YouTube, Prime), so they rest while Free My TV
-   is on.
+   promo apps is turned off (never uninstalled), and *Original* brings it all back. On TCL, the remote's Netflix,
+   YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons
+   (*Free My TV* → *Remote Buttons* picks what each opens); *Original* turns it off.
 8. **They switch on the TV:** *Free My TV* → *Home Screen* → *Free My TV*. The app uses the TV's own ADB on
    127.0.0.1 with its own key, so the TV asks once more to allow debugging. Don't switch modes from the computer.
    If the TV's Wi-Fi was saved during its first setup, the switch stops before changing anything and asks them to
@@ -79,6 +79,9 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 - On-screen text is bilingual, `Ui.tr("pt", "en")`: add both. Comments in English, short, only where the why
   isn't obvious.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
+  What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons) wins over those first values.
+- The remote's app buttons (`RemoteKeys`, `RemoteKeyService`) use TCL's key codes: they run only on TCL TVs, the
+  service is on only in Free My TV mode, and *Original* takes it out of the enabled accessibility services.
 - After any change, `./build.sh` must end with `Built FreeMyTV.apk`.
 
 ## Always

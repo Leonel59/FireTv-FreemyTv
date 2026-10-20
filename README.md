@@ -18,12 +18,13 @@ Open source. Built with Claude Code. One button to undo.
 ## What you get
 
 - **No ads.** No sponsored rows, banners or autoplaying promos. Not one.
-- **Your apps, front and center.** The streaming apps you actually use, on a glass shelf.
+- **Your apps, front and center.** The streaming apps you actually use, on a glass shelf. Pick them and their order right on the TV.
 - **Trending, not sponsored.** Three fresh picks every hour from what's trending this week and the latest releases, only from apps you already have. Movies and Shows get their own tabs.
 - **Weather and markets, one press away.** The hour-by-hour forecast, sunrise and sunset, and live crypto prices.
 - **Light by day, dark by night.** It follows your city's real sunset, the way your phone does.
 - **A screensaver to match.** Full-screen photos of the picks with a big glass clock.
 - **Fast.** 60 fps, every frame in 16.6 ms, on the TV's own chip. The home screen uses 96 MB of memory instead of 242 MB (−60%).<br><sub>Measured on a 98″ TCL Google TV running Android 14.</sub>
+- **Set up on the TV.** Language, temperature, theme, the weather and prices cards, which coins, and the apps on the shelf, in Free My TV's own settings.
 - **Safe.** No root. Nothing is uninstalled. One button brings back the factory home screen.
 
 ## Install
@@ -70,7 +71,7 @@ About ten minutes. You need a Google TV or Android TV (Android 12 or newer) and 
 
 ## Settings
 
-Everything lives in `config.properties`, created by the first build:
+The first values come from `config.properties`, created by the first build. Most of them can also be changed on the TV, in *Free My TV* → *Home Settings*, and the TV's choice wins:
 
 | Key | What it does | Default |
 |---|---|---|
@@ -100,10 +101,11 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
 
 - It becomes the home screen and the screensaver.
 - It turns off, without uninstalling:
-  - the stock home screen and screensaver, with the remote shortcuts they run on some TVs (like the Netflix button on TCL);
+  - the stock home screen and screensaver;
   - Google TV's recovery home, Play Games and YouTube Music;
   - on TCL TVs, the TCL Channel, messages, store demo, hotel menu, manuals, mirroring and logging apps;
   - Google Assistant, only with `disable_assistant=true`.
+- On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Free My TV* → *Remote Buttons*; *Original* turns the service off.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.
 - Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first.
 
@@ -149,6 +151,8 @@ It's your code, and Claude Code finds its way around it. Try:
 | [`HomeApps.java`](app/src/io/freemytv/HomeApps.java) | The shelf, inputs and All Apps |
 | [`DreamView.java`](app/src/io/freemytv/DreamView.java) | The screensaver |
 | [`SettingsActivity.java`](app/src/io/freemytv/SettingsActivity.java) | The settings screen (the app's icon) |
+| [`Prefs.java`](app/src/io/freemytv/Prefs.java) | Settings changed on the TV |
+| [`RemoteKeys.java`](app/src/io/freemytv/RemoteKeys.java) | The TCL remote's app buttons |
 | [`Watchdog.java`](app/src/io/freemytv/Watchdog.java) | The safety net |
 
 The website ([freemytv.io](https://freemytv.io)) is in [`docs/`](docs): plain HTML, CSS and JS on GitHub Pages.
