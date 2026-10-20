@@ -12,6 +12,7 @@ import android.view.KeyEvent;
  * Channel); with it off, the keys still arrive, so we open the app the person picked (Settings > Remote Buttons).
  * Disney and Globoplay are opened by the system itself, so they are not listed. The YouTube button (BUTTON_3) never
  * reaches an app's window; only the accessibility service's key filter (RemoteKeyService) sees it.
+ * On Vestel TVs only the Netflix button is ours: the system opens Netflix itself (a global key, after the filter).
  */
 final class RemoteKeys {
     private RemoteKeys() {}
@@ -19,9 +20,18 @@ final class RemoteKeys {
     /** Some TCL remotes (BT_RC833) send TCL's own YouTube key instead of BUTTON_3: the same button. */
     private static final int KEY_YOUTUBE_TCL = 4065;
 
-    /** The key codes are TCL's: on other brands they can be other buttons, so nothing here runs there. */
+    /**
+     * The key codes are the brand's own: on other brands they can be other buttons, so nothing here runs there.
+     * Vestel builds TVs sold under other brands (F&U...), so BRAND varies: check the maker too.
+     */
+    static final boolean TCL = is("TCL"), VESTEL = is("Vestel");
+
     static boolean supported() {
-        return "TCL".equalsIgnoreCase(Build.MANUFACTURER) || "TCL".equalsIgnoreCase(Build.BRAND);
+        return TCL || VESTEL;
+    }
+
+    private static boolean is(String maker) {
+        return maker.equalsIgnoreCase(Build.MANUFACTURER) || maker.equalsIgnoreCase(Build.BRAND);
     }
 
     /** Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed). */

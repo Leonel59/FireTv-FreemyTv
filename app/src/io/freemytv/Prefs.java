@@ -2,6 +2,7 @@ package io.freemytv;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.view.KeyEvent;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -22,7 +23,10 @@ final class Prefs {
 
     /** Remote keys we handle, with the app each opens until the user picks another. Codes read from the TCL's log. */
     static final int KEY_NETFLIX = 4062, KEY_YOUTUBE = 190, KEY_PRIME = 4099, KEY_TCL_CHANNEL = 4020;
-    static final int[] KEYS = {KEY_NETFLIX, KEY_YOUTUBE, KEY_PRIME, KEY_TCL_CHANNEL};
+    /** Vestel's Netflix button: STEM_1, which the TV hands to its Netflix key receiver (dumpsys window policy). */
+    static final int KEY_VESTEL_NETFLIX = KeyEvent.KEYCODE_STEM_1;
+    static final int[] KEYS = RemoteKeys.VESTEL ? new int[] {KEY_VESTEL_NETFLIX}
+            : new int[] {KEY_NETFLIX, KEY_YOUTUBE, KEY_PRIME, KEY_TCL_CHANNEL};
 
     /** Bumped by every change: screens compare it to know when to redraw. */
     static volatile int version;
@@ -120,7 +124,7 @@ final class Prefs {
 
     private static String defaultApp(int keyCode) {
         switch (keyCode) {
-            case KEY_NETFLIX: return "com.netflix.ninja";
+            case KEY_NETFLIX: case KEY_VESTEL_NETFLIX: return "com.netflix.ninja";
             case KEY_YOUTUBE: return "com.google.android.youtube.tv";
             case KEY_PRIME: return "com.amazon.amazonvideo.livingroom";
             case KEY_TCL_CHANNEL: return "";
