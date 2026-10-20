@@ -6,6 +6,7 @@ config.properties
 # Build output
 out/
 *.apk
+*.ipk
 
 # macOS
 .DS_Store

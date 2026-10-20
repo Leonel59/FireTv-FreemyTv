@@ -2,6 +2,7 @@
 
 A home screen for Google TV and Android TV that replaces the stock one, plus a settings app that switches between
 Free My TV and the TV's original home screen. A plain Android app in Java, built without Gradle by `build.sh`.
+LG TVs (webOS) get the same home screen as a web app: `web/`, packed and installed by `webos/` (see below).
 The website (freemytv.io) is in `docs/`: static HTML, CSS and JS, no build step. A push to `main` that changes it
 publishes it to GitHub Pages (`.github/workflows/pages.yml`). `docs/index.html` (English) and `docs/pt/index.html`
 (Brazilian Portuguese) are the same page in two languages, so change both; visitors from Brazil land on the
@@ -44,6 +45,27 @@ before you do it, and let them do the taps on the TV.
    `adb shell cmd wifi forget-network <id>`.
 9. **Check:** `adb logcat -s FreeMyTV` shows what the switch did.
 
+## Installing it on an LG TV (webOS)
+
+On LG it's an app, installed through LG's Developer Mode, and it changes nothing else on the TV: LG's home screen
+stays, and Free My TV opens with a long press of a number key.
+
+1. **Ask** for the TV's IP address and their city, if they didn't say. Tools: Python 3 and OpenSSH (`ssh`,
+   `ssh-keygen`), already on macOS, Linux and Windows 10+.
+2. **On the TV** (they do it): LG Content Store → *Developer Mode* → sign in with a free LG developer account
+   (webostv.developer.lge.com) → *Dev Mode Status* on (the TV restarts) → *Key Server* on. It shows the IP and a
+   passphrase.
+3. **Settings:** the same `config.properties` as on Android (the first `python3 webos/build.py` creates it). The
+   TMDB key rules above apply.
+4. **Build:** `python3 webos/build.py` must end with `Built FreeMyTV-webos.ipk`.
+5. **Install:** the first time needs the TV's passphrase, typed by them: ask them to run
+   `python3 webos/install.py <IP>` in their own terminal (yours can't answer its prompt, and the passphrase doesn't go
+   in the chat). It keeps the unlocked key in `~/.ssh/freemytv_webos_<IP>`, so later updates run from your terminal
+   with the same command.
+6. **Tell them:** while Free My TV is open, holding a number key pins it to that key. Developer Mode lasts about 40
+   days; *EXTEND* in that app renews it (if it runs out, the TV removes developer apps, and installing again brings it
+   back). `--uninstall` removes Free My TV.
+
 ## Adapting it to another TV
 
 Read first, change after. Read-only commands that tell you what the TV has:
@@ -65,8 +87,9 @@ Then, in the code:
 - Build, install, have them switch on the TV, read `adb logcat -s FreeMyTV`, then have them switch back to
   *Original* once and confirm everything returned.
 
-TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is a Google TV streamer on HDMI
-(Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set Free My TV up on the streamer.
+LG: the web app above. Other TVs that don't run Google TV or Android TV (Samsung and others): the way is a Google TV
+streamer on HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set Free My TV up on the
+streamer.
 
 **Uninstalled while in Free My TV mode?** The apps it turned off stay off. Bring them back with
 `adb shell pm enable <package>` (the `DEBLOAT` list and the stock home screen), then
@@ -96,6 +119,11 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 - The remote's app buttons (`RemoteKeys`, `RemoteKeyService`) use TCL's key codes: they run only on TCL TVs, the
   service is on only in Free My TV mode, and *Original* takes it out of the enabled accessibility services.
 - After any change, `./build.sh` must end with `Built FreeMyTV.apk`.
+- LG (`web/`): plain ES5 JavaScript and CSS without variables, grid or backdrop-filter, since older LG TVs (webOS 3
+  and 4) run a Chromium from 2015 to 2017; only transform and opacity animate. `web/tv.js` is the TV's side (Luna:
+  `listLaunchPoints`, `launch`, the inputs); `web/home.js` follows `HomeView`'s layout and behavior, so a design change
+  on Android belongs there too. Text: `tr(pt, en, es)`. Preview: `python3 webos/build.py --preview`, then open
+  `out/webos/index.html` in a browser (a stand-in lists sample apps).
 
 ## Always
 
