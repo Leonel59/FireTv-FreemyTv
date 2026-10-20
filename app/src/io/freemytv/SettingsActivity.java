@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -23,7 +25,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Free My TV's settings (the app's icon, "All Apps", or the gear on the home screen), in the style of Apple TV's
@@ -101,7 +107,7 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, PICKER = 4;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4;
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
@@ -111,9 +117,10 @@ public class SettingsActivity extends Activity {
         private final Scene scene = new Scene();
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final Spring[] pop = new Spring[12];
-        // The list picker (the city): what it shows, which one is in use, where we are.
+        private final List<String> appPkgs = new ArrayList<>(), appLabels = new ArrayList<>();
+        // The list picker (city, or the app of a remote button): what it shows, which one is in use, where we are.
         private final List<String> pickLabels = new ArrayList<>();
-        private int pickCurrent, pickScroll;
+        private int pickFor, pickCurrent, pickScroll;   // pickFor: 0 = city, 1.. = remote button (index + 1)
         private final RectF tmp = new RectF(), rowRect = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -213,10 +220,11 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             switch (screen) {
-                case MAIN: return 4;
+                case MAIN: return 5;
+                case HOME_CHOICE: return 2;
                 case HOME_SETTINGS: return settingLabels().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
-                default: return 2;
+                default: return Prefs.KEYS.length;
             }
         }
 
@@ -252,9 +260,10 @@ public class SettingsActivity extends Activity {
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"),
-                    Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", ""};
-            for (int i = 0; i < 4; i++) {
+                    Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Botões do Controle", "Remote Buttons"),
+                    Ui.tr("Ajustes da TV", "TV Settings")};
+            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", "", ""};
+            for (int i = 0; i < 5; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -281,7 +290,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 4 * (ROW_H + ROW_GAP) + 40) * k;
+            float y = (LIST_TOP + 5 * (ROW_H + ROW_GAP) + 30) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -465,10 +474,10 @@ public class SettingsActivity extends Activity {
                     } else {
                         if (backDown && !e.isCanceled()) {
                             if (screen == PICKER) {
-                                focus = 1;
-                                screen = HOME_SETTINGS;
+                                focus = pickFor == 0 ? 1 : pickFor - 1;
+                                screen = pickFor == 0 ? HOME_SETTINGS : REMOTE_KEYS;
                             } else {
-                                focus = screen == HOME_SETTINGS ? 2 : 0;
+                                focus = screen == HOME_SETTINGS ? 2 : screen == REMOTE_KEYS ? 3 : 0;
                                 screen = MAIN;
                             }
                         }
@@ -481,7 +490,7 @@ public class SettingsActivity extends Activity {
             }
         }
 
-        // MARK: - Home Settings
+        // MARK: - Home Settings and Remote Buttons
 
         private static final String[] LANGUAGES = {"auto", "pt", "en"}, UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
 
@@ -526,8 +535,51 @@ public class SettingsActivity extends Activity {
             return on ? Ui.tr("Ligado", "On") : Ui.tr("Desligado", "Off");
         }
 
+        private String[] keyLabels() {
+            return new String[] {Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão YouTube", "YouTube button"),
+                    Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão TCL Channel", "TCL Channel button")};
+        }
+
+        private String[] keyValues() {
+            String[] v = new String[Prefs.KEYS.length];
+            for (int i = 0; i < v.length; i++) {
+                int at = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[i]));
+                v[i] = at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
+            }
+            return v;
+        }
+
+        /** Installed TV apps, by name, after "Nothing": what a remote button can open. */
+        private void loadApps() {
+            PackageManager pm = getContext().getPackageManager();
+            List<String[]> found = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+            for (ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+                String pkg = ri.activityInfo.packageName;
+                if (pkg.equals(getContext().getPackageName()) || !seen.add(pkg)) continue;
+                found.add(new String[] {pkg, String.valueOf(ri.loadLabel(pm))});
+            }
+            Collections.sort(found, (a, b) -> a[1].toLowerCase(Locale.ROOT).compareTo(b[1].toLowerCase(Locale.ROOT)));
+            appPkgs.clear();
+            appLabels.clear();
+            appPkgs.add("");
+            appLabels.add(Ui.tr("Nada", "Nothing"));
+            for (String[] f : found) {
+                appPkgs.add(f[0]);
+                appLabels.add(f[1]);
+            }
+        }
+
         /** Changes the focused row's value one step (OK and → go forward, ← goes back). */
         private void adjust(int dir) {
+            if (screen == REMOTE_KEYS) {
+                int n = appPkgs.size();
+                int at = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[focus]));
+                int next = at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n;
+                Prefs.setKeyApp(Prefs.KEYS[focus], appPkgs.get(next));
+                return;
+            }
             switch (focus) {
                 case 0: {
                     int at = java.util.Arrays.asList(LANGUAGES).indexOf(Prefs.language());
@@ -567,10 +619,16 @@ public class SettingsActivity extends Activity {
             return pickLabels.size();
         }
 
-        private void openPicker() {
+        private void openPicker(int which) {
+            pickFor = which;
             pickLabels.clear();
-            for (String[] city : Prefs.CITIES) pickLabels.add(city[0]);
-            pickCurrent = Prefs.cityIndex();
+            if (which == 0) {
+                for (String[] city : Prefs.CITIES) pickLabels.add(city[0]);
+                pickCurrent = Prefs.cityIndex();
+            } else {
+                pickLabels.addAll(appLabels);
+                pickCurrent = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[which - 1]));
+            }
             int visible = Math.min(PICK_VISIBLE, pickLabels.size());
             int at = Math.max(0, pickCurrent);
             pickScroll = Math.max(0, Math.min(at - 3, pickLabels.size() - visible));
@@ -578,10 +636,11 @@ public class SettingsActivity extends Activity {
             screen = PICKER;
         }
 
-        /** A long list (the cities): nine rows at a time, the one in use checked. */
+        /** A long list (cities, apps): nine rows at a time, the one in use checked. */
         private void drawPicker(Canvas c) {
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(Ui.tr("Cidade", "City"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            String title = pickFor == 0 ? Ui.tr("Cidade", "City") : keyLabels()[pickFor - 1];
+            c.drawText(title, LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             int rows = rowCount();
             for (int i = 0; i < rows; i++) {
                 int at = pickScroll + i;
@@ -602,17 +661,18 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawList(Canvas c) {
-            String[] labels = settingLabels();
-            String[] values = settingValues();
+            boolean keys = screen == REMOTE_KEYS;
+            String[] labels = keys ? keyLabels() : settingLabels();
+            String[] values = keys ? keyValues() : settingValues();
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(Ui.tr("Ajustes do Início", "Home Settings"),
+            c.drawText(keys ? Ui.tr("Botões do Controle", "Remote Buttons") : Ui.tr("Ajustes do Início", "Home Settings"),
                     LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             for (int i = 0; i < labels.length; i++) {
                 float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                boolean locked = i >= 6 && !Prefs.quotes();
+                boolean locked = !keys && i >= 6 && !Prefs.quotes();
                 rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -622,6 +682,10 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             c.drawText(Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value."), LIST_X * k + 30 * k, hy, hint);
+            if (keys) {
+                c.drawText(Ui.tr("Disney e Globoplay: a própria TV controla esses botões.",
+                        "Disney and Globoplay: the TV itself controls those buttons."), LIST_X * k + 30 * k, hy + 38 * k, hint);
+            }
         }
 
         private void activate() {
@@ -636,12 +700,16 @@ public class SettingsActivity extends Activity {
                 focus = 0;
             } else if (screen == PICKER) {
                 int at = pickScroll + focus;
-                Prefs.setCity(at);
-                HomeData.get(c).settingsChanged();
-                focus = 1;
-                screen = HOME_SETTINGS;
-            } else if (screen == HOME_SETTINGS && focus == 1) {
-                openPicker();
+                if (pickFor == 0) {
+                    Prefs.setCity(at);
+                    HomeData.get(c).settingsChanged();
+                } else {
+                    Prefs.setKeyApp(Prefs.KEYS[pickFor - 1], appPkgs.get(at));
+                }
+                focus = pickFor == 0 ? 1 : pickFor - 1;
+                screen = pickFor == 0 ? HOME_SETTINGS : REMOTE_KEYS;
+            } else if (screen == REMOTE_KEYS || (screen == HOME_SETTINGS && focus == 1)) {
+                openPicker(screen == REMOTE_KEYS ? focus + 1 : 0);
             } else if (screen == HOME_SETTINGS) {
                 adjust(1);
                 invalidate();
@@ -655,6 +723,11 @@ public class SettingsActivity extends Activity {
                 activity.showPreview();
             } else if (focus == 2) {
                 screen = HOME_SETTINGS;
+                focus = 0;
+            } else if (focus == 3) {
+                HomeMode.ensureRemoteService(c, 0);   // the buttons work from inside other apps through this service
+                loadApps();
+                screen = REMOTE_KEYS;
                 focus = 0;
             } else {
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));

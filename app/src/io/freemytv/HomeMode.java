@@ -90,12 +90,36 @@ final class HomeMode {
 
     /** After the TV boots (and after a TV update): wait for the system to settle and check Free My TV mode. */
     static void bootCheck(Context c) {
+        ensureRemoteService(c, 30_000);
         ModeJob.schedule(c, ModeJob.VERIFY, null, 45_000);
     }
 
     /** After an update of this app: complete Free My TV mode if anything is missing. */
     static void verify(Context c) {
         ModeJob.schedule(c, ModeJob.VERIFY, null, 0);
+    }
+
+    /**
+     * Turns the remote-buttons service back on. Android switches an accessibility service off when its app is updated,
+     * and the remote's app buttons (Netflix, YouTube, Prime) depend on it.
+     */
+    static void ensureRemoteService(Context c, long delayMs) {
+        ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
+    }
+
+    static void ensureRemoteServiceNow(Context app) {
+        String service = PKG + "/" + PKG + ".RemoteKeyService";
+        try (Adb adb = Adb.connect(app, 10_000, null)) {
+            String current = adb.shell("settings get secure enabled_accessibility_services").trim();
+            if (current.contains(service)) return;
+            // Keep whatever else is enabled (TalkBack, ...): ours is added to the list.
+            String list = current.isEmpty() || current.equals("null") ? service : current + ":" + service;
+            adb.shell("settings put secure enabled_accessibility_services " + list);
+            adb.shell("settings put secure accessibility_enabled 1");
+            AppLog.w("remote buttons service turned on");
+        } catch (java.io.IOException e) {
+            AppLog.w("remote buttons service: " + e.getMessage());
+        }
     }
 
     // MARK: - Switches (main process, from ModeJob)

@@ -26,6 +26,10 @@ final class Prefs {
         {"Lisboa", "38.7223", "-9.1393"}, {"New York", "40.7128", "-74.0060"},
     };
 
+    /** Remote keys we handle, with the app each opens until the user picks another. Codes read from the TCL's log. */
+    static final int KEY_NETFLIX = 4062, KEY_YOUTUBE = 190, KEY_PRIME = 4099, KEY_TCL_CHANNEL = 4020;
+    static final int[] KEYS = {KEY_NETFLIX, KEY_YOUTUBE, KEY_PRIME, KEY_TCL_CHANNEL};
+
     /** Bumped by every change: screens compare it to know when to redraw. */
     static volatile int version;
 
@@ -104,4 +108,20 @@ final class Prefs {
 
     static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
     static void setCoin(int i, boolean on) { put("coin" + i, on); }
+
+    // MARK: - Remote buttons
+
+    private static String defaultApp(int keyCode) {
+        switch (keyCode) {
+            case KEY_NETFLIX: return "com.netflix.ninja";
+            case KEY_YOUTUBE: return "com.google.android.youtube.tv";
+            case KEY_PRIME: return "com.amazon.amazonvideo.livingroom";
+            case KEY_TCL_CHANNEL: return "com.apple.atve.androidtv.appletv";
+            default: return "";
+        }
+    }
+
+    /** Package the key opens ("" = nothing). */
+    static String keyApp(int keyCode) { return sp().getString("key" + keyCode, defaultApp(keyCode)); }
+    static void setKeyApp(int keyCode, String pkg) { put("key" + keyCode, pkg); }
 }
