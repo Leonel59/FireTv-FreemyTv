@@ -121,6 +121,15 @@ final class HomeMode {
             JSONObject latest = state(c);
             latest.put("originalHome", home).put("originalDream", dream);
             save(c, latest);
+            // Turning off an app makes Android delete the Wi-Fi networks it saved (#14), and Original can't bring them
+            // back. The TV's first setup usually saved the network: then stop here, before anything changes.
+            Set<String> owners = wifiOwners(adb);
+            if (owners.contains(GOOGLE_SETUP) || owners.contains(packageOf(home))) {
+                throw new IOException(Ui.tr("o Wi-Fi foi salvo pela configuração inicial da TV, e desligar esse app apagaria a rede. "
+                        + "Em Configurações → Rede e Internet, esqueça a rede e conecte de novo; depois tente outra vez.",
+                        "your Wi-Fi was saved by the TV's first setup, and turning that app off would erase it. "
+                        + "In Settings → Network & Internet, forget the network and connect again, then try once more."));
+            }
             if (metrics(latest, ORIGINAL) == null && !home.isEmpty()) {
                 busy(c, Ui.tr("Medindo o Início original…", "Measuring the original home screen…"));
                 measureHomeTime(c, adb, ORIGINAL);
@@ -137,7 +146,7 @@ final class HomeMode {
             for (String pkg : targets) {
                 done++;
                 busy(c, Ui.tr("Desligando apps (", "Turning off apps (") + done + "/" + targets.size() + ")…");
-                if (PROTECTED.contains(pkg) || !present.contains(pkg)) continue;
+                if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg)) continue;
                 String out = adb.shell("pm disable-user --user 0 " + pkg);
                 if (out.contains("disabled-user")) disabled.add(pkg);
                 else AppLog.w("could not turn off " + pkg + ": " + out.trim());
@@ -259,6 +268,7 @@ final class HomeMode {
             try (Adb adb = Adb.connect(app, 10_000, null)) {
                 Set<String> present = packages(adb, "");
                 Set<String> disabledNow = packages(adb, "-d");
+                Set<String> owners = wifiOwners(adb);
                 boolean reverted = s.optBoolean("homeReverted");
                 String home = originalHome(s);
                 Set<String> wanted = new HashSet<>(stringList(s, "disabled"));
@@ -267,7 +277,7 @@ final class HomeMode {
                 }
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
                 for (String pkg : sorted(wanted)) {
-                    if (PROTECTED.contains(pkg) || !present.contains(pkg)) continue;
+                    if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg)) continue;
                     if (disabledNow.contains(pkg)) {
                         disabled.add(pkg);
                         continue;
@@ -339,6 +349,14 @@ final class HomeMode {
         String component = lines[lines.length - 1].trim();
         // With no default home yet, the system's chooser answers ("android/...ResolverActivity"): unknown.
         return component.contains("/") && !component.startsWith("android/") ? packageOf(component) : "";
+    }
+
+    /** Apps that saved a Wi-Fi network ("cname" in the Wi-Fi service's list of saved networks). */
+    private static Set<String> wifiOwners(Adb adb) throws IOException {
+        Set<String> owners = new HashSet<>();
+        Matcher m = Pattern.compile("cname=([\\w.]+)").matcher(adb.shell("dumpsys wifi | grep -o 'cname=[^ ]*'"));
+        while (m.find()) owners.add(m.group(1));
+        return owners;
     }
 
     /** The recorded home screen of the TV, as {@link #realHome}. */
