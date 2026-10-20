@@ -105,6 +105,7 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - on TCL TVs, the TCL Channel, messages, store demo, hotel menu, manuals, mirroring and logging apps;
   - Google Assistant, only with `disable_assistant=true`.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.
+- Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first.
 
 ## Any TV
 

@@ -36,6 +36,8 @@ before you do it, and let them do the taps on the TV.
    is on.
 8. **They switch on the TV:** *Free My TV* → *Home Screen* → *Free My TV*. The app uses the TV's own ADB on
    127.0.0.1 with its own key, so the TV asks once more to allow debugging. Don't switch modes from the computer.
+   If the TV's Wi-Fi was saved during its first setup, the switch stops before changing anything and asks them to
+   forget the network and connect again in Settings (Network & Internet); then the switch goes through.
 9. **Check:** `adb logcat -s FreeMyTV` shows what the switch did.
 
 ## Adapting it to another TV
@@ -81,6 +83,8 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 
 ## Always
 
+- Never turn off an app that saved a Wi-Fi network: Android deletes its networks and Original can't bring them
+  back (`wifiOwners` in `HomeMode`).
 - Never commit `config.properties`, `*.keystore` or any key.
 - Never uninstall or clear the data of system apps; only `pm disable-user --user 0`, through `HomeMode`, so
   *Original* can bring it back.
