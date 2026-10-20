@@ -154,8 +154,11 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   isn't obvious.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
   What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons) wins over those first values.
-- The remote's app buttons (`RemoteKeys`, `RemoteKeyService`) use TCL's key codes: they run only on TCL TVs, the
-  service is on only in Free My TV mode, and *Original* takes it out of the enabled accessibility services.
+- The remote's app buttons (`RemoteKeys`, `RemoteKeyService`) use each brand's key codes: they run only on TCL and
+  Vestel TVs, the service is on only in Free My TV mode, and *Original* takes it out of the enabled accessibility
+  services. Vestel (F&U and other store brands; MediaTek, Android TV 14 tested) maps its Netflix button to
+  `KEYCODE_STEM_1`, a global key (`dumpsys window policy` lists them) that the key filter sees first; its YouTube,
+  Prime Video and Google Play buttons stay with the system. The stock lists needed no Vestel entries.
 - After any change, `./build.sh` must end with `Built FreeMyTV.apk`.
 - LG and Samsung (`web/`): plain ES5 JavaScript and CSS without variables, grid or backdrop-filter, since older TVs
   (webOS 3 and 4, Tizen 3) run a Chromium from 2015 to 2017; only transform and opacity animate. `web/tv.js` is the
