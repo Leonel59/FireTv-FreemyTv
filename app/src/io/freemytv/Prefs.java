@@ -3,6 +3,8 @@ package io.freemytv;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -108,6 +110,23 @@ final class Prefs {
 
     static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
     static void setCoin(int i, boolean on) { put("coin" + i, on); }
+
+    // MARK: - Shelf
+
+    /** Packages on the home shelf, in order; null until the user edits it (then the built-in list applies). */
+    static List<String> shelf() {
+        String v = sp().getString("shelf", null);
+        if (v == null) return null;
+        List<String> out = new ArrayList<>();
+        for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
+        return out;
+    }
+
+    static void setShelf(List<String> packages) {
+        StringBuilder sb = new StringBuilder();
+        for (String p : packages) sb.append(sb.length() == 0 ? "" : ",").append(p);
+        put("shelf", sb.toString());
+    }
 
     // MARK: - Remote buttons
 

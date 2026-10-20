@@ -107,7 +107,7 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5;
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
@@ -120,6 +120,9 @@ public class SettingsActivity extends Activity {
         private final List<String> appPkgs = new ArrayList<>(), appLabels = new ArrayList<>();
         // The list picker (city, or the app of a remote button): what it shows, which one is in use, where we are.
         private final List<String> pickLabels = new ArrayList<>();
+        // The shelf editor: the apps it can hold (selected ones first, in order) and the selection.
+        private final List<String[]> shelfRows = new ArrayList<>();
+        private final List<String> shelfOrder = new ArrayList<>();
         private int pickFor, pickCurrent, pickScroll;   // pickFor: 0 = city, 1.. = remote button (index + 1)
         private final RectF tmp = new RectF(), rowRect = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
@@ -220,10 +223,11 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             switch (screen) {
-                case MAIN: return 5;
+                case MAIN: return 6;
                 case HOME_CHOICE: return 2;
                 case HOME_SETTINGS: return settingLabels().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
+                case SHELF_EDIT: return Math.min(PICK_VISIBLE, shelfRows.size());
                 default: return Prefs.KEYS.length;
             }
         }
@@ -252,7 +256,7 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 704 * k, version);
 
-            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else drawList(c);
+            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else drawList(c);
         }
 
         private void drawMain(Canvas c, float seconds) {
@@ -260,10 +264,10 @@ public class SettingsActivity extends Activity {
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"),
-                    Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Botões do Controle", "Remote Buttons"),
-                    Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", "", ""};
-            for (int i = 0; i < 5; i++) {
+                    Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Prateleira", "Shelf"),
+                    Ui.tr("Botões do Controle", "Remote Buttons"), Ui.tr("Ajustes da TV", "TV Settings")};
+            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", "", "", ""};
+            for (int i = 0; i < 6; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -290,7 +294,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 5 * (ROW_H + ROW_GAP) + 30) * k;
+            float y = (LIST_TOP + 6 * (ROW_H + ROW_GAP) + 20) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -452,7 +456,10 @@ public class SettingsActivity extends Activity {
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
-                    if (down && screen == HOME_SETTINGS) {
+                    if (down && screen == SHELF_EDIT) {
+                        moveShelfApp(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                        invalidate();
+                    } else if (down && screen == HOME_SETTINGS) {
                         adjust(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
                     }
@@ -477,7 +484,7 @@ public class SettingsActivity extends Activity {
                                 focus = pickFor == 0 ? 1 : pickFor - 1;
                                 screen = pickFor == 0 ? HOME_SETTINGS : REMOTE_KEYS;
                             } else {
-                                focus = screen == HOME_SETTINGS ? 2 : screen == REMOTE_KEYS ? 3 : 0;
+                                focus = screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? 3 : screen == REMOTE_KEYS ? 4 : 0;
                                 screen = MAIN;
                             }
                         }
@@ -612,11 +619,87 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean scrolling() {
-            return screen == PICKER;
+            return screen == PICKER || screen == SHELF_EDIT;
         }
 
         private int listSize() {
-            return pickLabels.size();
+            return screen == SHELF_EDIT ? shelfRows.size() : pickLabels.size();
+        }
+
+        // MARK: - Shelf editor
+
+        private void openShelfEditor() {
+            shelfOrder.clear();
+            shelfOrder.addAll(HomeApps.shelfPackages(getContext()));
+            rebuildShelfRows(HomeApps.shelfCandidates(getContext()));
+            pickScroll = 0;
+            focus = 0;
+            screen = SHELF_EDIT;
+        }
+
+        /** Selected apps first, in shelf order, then the rest in the order they came. */
+        private void rebuildShelfRows(List<String[]> candidates) {
+            shelfRows.clear();
+            for (String pkg : shelfOrder) {
+                for (String[] cand : candidates) if (cand[0].equals(pkg)) { shelfRows.add(cand); break; }
+            }
+            for (String[] cand : candidates) if (!shelfOrder.contains(cand[0])) shelfRows.add(cand);
+        }
+
+        /** Same rows after a change: keeps the focus on the app that was focused. */
+        private void refreshShelfRows(String focusedPkg) {
+            List<String[]> all = new ArrayList<>(shelfRows);
+            rebuildShelfRows(all);
+            for (int i = 0; i < shelfRows.size(); i++) {
+                if (!shelfRows.get(i)[0].equals(focusedPkg)) continue;
+                int visible = rowCount();
+                if (i < pickScroll) pickScroll = i;
+                else if (i >= pickScroll + visible) pickScroll = i - visible + 1;
+                focus = i - pickScroll;
+                break;
+            }
+            Prefs.setShelf(shelfOrder);
+        }
+
+        /** OK: puts the app on the shelf (at the end) or takes it off. */
+        private void toggleShelfApp() {
+            String pkg = shelfRows.get(pickScroll + focus)[0];
+            if (shelfOrder.contains(pkg)) shelfOrder.remove(pkg);
+            else if (shelfOrder.size() < HomeApps.MAX_SHELF) shelfOrder.add(pkg);
+            else return;
+            refreshShelfRows(pkg);
+        }
+
+        /** ← → : moves a shelf app one place earlier or later. */
+        private void moveShelfApp(int dir) {
+            String pkg = shelfRows.get(pickScroll + focus)[0];
+            int at = shelfOrder.indexOf(pkg), to = at + dir;
+            if (at < 0 || to < 0 || to >= shelfOrder.size()) return;
+            shelfOrder.remove(at);
+            shelfOrder.add(to, pkg);
+            refreshShelfRows(pkg);
+        }
+
+        private void drawShelfEditor(Canvas c) {
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            c.drawText(Ui.tr("Prateleira", "Shelf"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            int rows = rowCount();
+            for (int i = 0; i < rows; i++) {
+                String[] app = shelfRows.get(pickScroll + i);
+                int place = shelfOrder.indexOf(app[0]);
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(place >= 0 ? 0xF2FFFFFF : 0x80FFFFFF, place >= 0 ? INK : 0x801C1C1E, f));
+                rowValue.setColor(blend(0xB3FFFFFF, 0xB31C1C1E, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(TextUtils.ellipsize(app[1], new TextPaint(rowLabel), 520 * k, TextUtils.TruncateAt.END).toString(), rowRect.left + 30 * k, base, rowLabel);
+                c.drawText(place >= 0 ? "#" + (place + 1) : Ui.tr("Fora", "Off"), rowRect.right - 30 * k, base, rowValue);
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
+            float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            c.drawText(Ui.tr("OK põe ou tira da prateleira (até " + HomeApps.MAX_SHELF + "). ← → mudam a ordem.",
+                    "OK adds or removes (up to " + HomeApps.MAX_SHELF + "). ← → change the order."), LIST_X * k + 30 * k, hy, hint);
         }
 
         private void openPicker(int which) {
@@ -708,6 +791,10 @@ public class SettingsActivity extends Activity {
                 }
                 focus = pickFor == 0 ? 1 : pickFor - 1;
                 screen = pickFor == 0 ? HOME_SETTINGS : REMOTE_KEYS;
+            } else if (screen == SHELF_EDIT) {
+                toggleShelfApp();
+                invalidate();
+                return;
             } else if (screen == REMOTE_KEYS || (screen == HOME_SETTINGS && focus == 1)) {
                 openPicker(screen == REMOTE_KEYS ? focus + 1 : 0);
             } else if (screen == HOME_SETTINGS) {
@@ -725,6 +812,8 @@ public class SettingsActivity extends Activity {
                 screen = HOME_SETTINGS;
                 focus = 0;
             } else if (focus == 3) {
+                openShelfEditor();
+            } else if (focus == 4) {
                 HomeMode.ensureRemoteService(c, 0);   // the buttons work from inside other apps through this service
                 loadApps();
                 screen = REMOTE_KEYS;
