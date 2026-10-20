@@ -651,7 +651,7 @@ final class Recs {
             p.kind = o.optString("kind");
             p.title = o.optString("title");
             p.backdrop = o.optString("backdrop");
-            p.meta = fixGenres(o.optString("meta"));
+            p.meta = o.optString("meta");
             p.app = o.optString("app").isEmpty() ? null : o.optString("app");
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");
             p.detailed = o.optBoolean("detailed");
