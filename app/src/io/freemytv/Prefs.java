@@ -69,11 +69,16 @@ final class Prefs {
 
     static void setTheme(String v) { put("theme", v); }
 
-    // MARK: - City (from config.properties)
+    // MARK: - City
 
-    static String city() { return Config.CITY.trim(); }
-    static String latitude() { return Config.LATITUDE; }
-    static String longitude() { return Config.LONGITUDE; }
+    static String city() { return sp().getString("city", Config.CITY).trim(); }
+    static String latitude() { return sp().getString("latitude", Config.LATITUDE); }
+    static String longitude() { return sp().getString("longitude", Config.LONGITUDE); }
+
+    static void setCity(String name, String latitude, String longitude) {
+        sp().edit().putString("city", name).putString("latitude", latitude).putString("longitude", longitude).apply();
+        version++;
+    }
 
     // MARK: - Widgets and coins
 

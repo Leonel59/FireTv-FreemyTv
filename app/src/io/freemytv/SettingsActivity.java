@@ -1,6 +1,7 @@
 package io.freemytv;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -23,6 +24,8 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -127,6 +130,9 @@ public class SettingsActivity extends Activity {
         private final List<String[]> shelfRows = new ArrayList<>();
         private final List<String> shelfOrder = new ArrayList<>();
         private int pickFor, pickCurrent, pickScroll;   // pickFor: the remote button (index + 1)
+        private static final int PICK_CITY = 0;
+        private final List<String[]> cities = new ArrayList<>();
+        private String cityStatus = "";
         private final RectF tmp = new RectF(), rowRect = new RectF(), focusBox = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -595,7 +601,10 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            if (screen == PICKER) {
+                            if (screen == PICKER && pickFor == PICK_CITY) {
+                                focus = CITY_ROW;
+                                screen = HOME_SETTINGS;
+                            } else if (screen == PICKER) {
                                 focus = pickFor - 1;
                                 screen = REMOTE_KEYS;
                             } else {
@@ -617,7 +626,7 @@ public class SettingsActivity extends Activity {
 
         private static final String[] LANGUAGES = {"auto", "pt", "en", "es"}, UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
         /** Home Settings: language, temperature, theme, weather, quotes, then one row per coin. */
-        private static final int COIN_ROWS = 5;
+        private static final int CITY_ROW = 4, COIN_ROWS = 6;
 
         private boolean dollar() {
             return "BRL".equalsIgnoreCase(Config.CURRENCY.trim());
@@ -629,6 +638,7 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("Temperatura", "Temperature"));
             l.add(Ui.tr("Tema", "Theme"));
             l.add(Ui.tr("Widget do clima", "Weather widget"));
+            l.add(Ui.tr("Cidade", "City"));
             l.add(Ui.tr("Widget de cotações", "Quotes widget"));
             l.add("Bitcoin");
             l.add("Ethereum");
@@ -647,7 +657,8 @@ public class SettingsActivity extends Activity {
             String theme = Prefs.theme();
             v[2] = theme.equals("light") ? Ui.tr("Claro", "Light") : theme.equals("dark") ? Ui.tr("Escuro", "Dark") : Ui.tr("Automático", "Automatic");
             v[3] = onOff(Prefs.weather());
-            v[4] = onOff(Prefs.quotes());
+            v[CITY_ROW] = !cityStatus.isEmpty() ? cityStatus : Prefs.city().isEmpty() ? "—" : Prefs.city();
+            v[5] = onOff(Prefs.quotes());
             // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
             for (int i = COIN_ROWS; i < v.length; i++) v[i] = onOff(Prefs.quotes() && Prefs.coin(i - COIN_ROWS));
             return v;
@@ -719,13 +730,65 @@ public class SettingsActivity extends Activity {
                     break;
                 }
                 case 3: Prefs.setWeather(!Prefs.weather()); break;
-                case 4: Prefs.setQuotes(!Prefs.quotes()); break;
+                case CITY_ROW: return;
+                case 5: Prefs.setQuotes(!Prefs.quotes()); break;
                 default:
                     if (!Prefs.quotes()) return;
                     Prefs.setCoin(focus - COIN_ROWS, !Prefs.coin(focus - COIN_ROWS));
                     break;
             }
             HomeData.get(getContext()).settingsChanged();
+        }
+
+        private void askCity() {
+            if (Ui.tr("Procurando…", "Searching…").equals(cityStatus)) return;
+            EditText field = new EditText(activity);
+            field.setSingleLine(true);
+            field.setHint(Ui.tr("Digite o nome da cidade", "Type the city's name"));
+            field.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+            AlertDialog dialog = new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(Ui.tr("Cidade", "City"))
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("Buscar", "Search"), (d, which) -> searchCity(field.getText().toString()))
+                    .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
+                    .create();
+            field.setOnEditorActionListener((v, action, event) -> {
+                dialog.dismiss();
+                searchCity(field.getText().toString());
+                return true;
+            });
+            dialog.show();
+        }
+
+        private void searchCity(String name) {
+            if (name.trim().isEmpty()) return;
+            cityStatus = Ui.tr("Procurando…", "Searching…");
+            invalidate();
+            new Thread(() -> {
+                List<String[]> found;
+                String error;
+                try {
+                    found = HomeData.findCity(name);
+                    error = found.isEmpty() ? Ui.tr("Nenhuma cidade com esse nome.", "No city with that name.") : "";
+                } catch (Exception e) {
+                    found = new ArrayList<>();
+                    error = Ui.tr("Não deu para buscar agora: ", "Couldn't search now: ") + e.getMessage();
+                    AppLog.w("city search: " + e.getMessage());
+                }
+                List<String[]> result = found;
+                String message = error;
+                handler.post(() -> {
+                    cityStatus = message;
+                    if (!result.isEmpty() && screen == HOME_SETTINGS) {
+                        cities.clear();
+                        cities.addAll(result);
+                        openPicker(PICK_CITY);
+                        spoken.focusMoved();
+                    }
+                    invalidate();
+                    if (!message.isEmpty()) handler.postDelayed(() -> { cityStatus = ""; invalidate(); }, 4000);
+                });
+            }).start();
         }
 
         private boolean scrolling() {
@@ -816,8 +879,13 @@ public class SettingsActivity extends Activity {
         private void openPicker(int which) {
             pickFor = which;
             pickLabels.clear();
-            pickLabels.addAll(appLabels);
-            pickCurrent = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[which - 1]));
+            if (which == PICK_CITY) {
+                for (String[] city : cities) pickLabels.add(city[0]);
+                pickCurrent = -1;
+            } else {
+                pickLabels.addAll(appLabels);
+                pickCurrent = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[which - 1]));
+            }
             int visible = Math.min(PICK_VISIBLE, pickLabels.size());
             int at = Math.max(0, pickCurrent);
             pickScroll = Math.max(0, Math.min(at - 3, pickLabels.size() - visible));
@@ -828,7 +896,7 @@ public class SettingsActivity extends Activity {
         /** A long list (the apps): nine rows at a time, the one in use checked. */
         private void drawPicker(Canvas c) {
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            String title = keyLabels()[pickFor - 1];
+            String title = pickFor == PICK_CITY ? Ui.tr("Cidade", "City") : keyLabels()[pickFor - 1];
             c.drawText(title, LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             int rows = rowCount();
             for (int i = 0; i < rows; i++) {
@@ -890,6 +958,12 @@ public class SettingsActivity extends Activity {
                 }
                 screen = MAIN;
                 focus = 0;
+            } else if (screen == PICKER && pickFor == PICK_CITY) {
+                String[] city = cities.get(pickScroll + focus);
+                Prefs.setCity(city[1], city[2], city[3]);
+                HomeData.get(c).settingsChanged();
+                focus = CITY_ROW;
+                screen = HOME_SETTINGS;
             } else if (screen == PICKER) {
                 int at = pickScroll + focus;
                 Prefs.setKeyApp(Prefs.KEYS[pickFor - 1], appPkgs.get(at));
@@ -901,6 +975,9 @@ public class SettingsActivity extends Activity {
                 return;
             } else if (screen == REMOTE_KEYS) {
                 openPicker(focus + 1);
+            } else if (screen == HOME_SETTINGS && focus == CITY_ROW) {
+                askCity();
+                return;
             } else if (screen == HOME_SETTINGS) {
                 adjust(1);
                 invalidate();

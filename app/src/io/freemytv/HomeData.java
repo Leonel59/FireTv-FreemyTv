@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -242,6 +243,26 @@ final class HomeData {
         SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US);
         f.setTimeZone(zone);
         return f.parse(iso).getTime();
+    }
+
+    static List<String[]> findCity(String name) throws Exception {
+        String lang = Ui.en ? "en" : Ui.es ? "es" : "pt";
+        JSONObject o = new JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?count=10&format=json&language=" + lang
+                + "&name=" + URLEncoder.encode(name.trim(), "UTF-8")));
+        JSONArray results = o.optJSONArray("results");
+        List<String[]> out = new ArrayList<>();
+        for (int i = 0; results != null && i < results.length(); i++) {
+            JSONObject r = results.getJSONObject(i);
+            String city = r.optString("name", "");
+            if (city.isEmpty() || !r.has("latitude") || !r.has("longitude")) continue;
+            StringBuilder label = new StringBuilder(city);
+            for (String part : new String[] {r.optString("admin1", ""), r.optString("country", "")}) {
+                if (!part.isEmpty() && !part.equals(city)) label.append(", ").append(part);
+            }
+            out.add(new String[] {label.toString(), city,
+                    String.format(Locale.US, "%.4f", r.getDouble("latitude")), String.format(Locale.US, "%.4f", r.getDouble("longitude"))});
+        }
+        return out;
     }
 
     private static String get(String url) throws IOException {
