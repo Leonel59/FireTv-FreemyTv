@@ -70,8 +70,14 @@ def ssh(ip, key, command, stdin=None, tty=False):
 
 def luna(ip, key, uri, payload, replies=1, wait=20):
     # luna-send-pub prints nothing without a terminal (-tt), and the installer streams several replies.
-    command = "timeout %d luna-send-pub -n %d %s '%s'" % (wait, replies, uri, json.dumps(payload, separators=(',', ':')))
-    return ssh(ip, key, command, tty=True).stdout or ''
+    # Older webOS ships BusyBox before 1.30, whose timeout only takes -t SECS.
+    # Some (webOS 6) refuse the terminal; there -i streams the replies without one, until the timeout.
+    timeout = "if timeout -t 1 true 2>/dev/null; then T='timeout -t %d'; else T='timeout %d'; fi; " % (wait, wait)
+    message = "%s '%s'" % (uri, json.dumps(payload, separators=(',', ':')))
+    out = ssh(ip, key, timeout + '$T luna-send-pub -n %d %s' % (replies, message), tty=True).stdout or ''
+    if not out.strip():
+        out = ssh(ip, key, timeout + '$T luna-send-pub -i %s </dev/null' % message).stdout or ''
+    return out
 
 
 def main():
