@@ -180,10 +180,12 @@ final class HomeMode {
                 String found = currentHome(adb);
                 home = found != null ? realHome(found) : "";
             }
-            String dream = s.optString("originalDream", "");
+            String dream = originalDream(s);
             if (dream.isEmpty()) dream = defaultDream(adb);
             JSONObject latest = state(c);
             latest.put("originalHome", home).put("originalDream", dream);
+            String saver = adb.shell("settings get secure screensaver_components").trim();
+            if (!saver.contains(PKG + "/")) latest.put("originalScreensaver", safeComponents(saver));
             save(c, latest);
             // Turning off an app makes Android delete the Wi-Fi networks it saved (#14), and Original can't bring them
             // back. The TV's first setup usually saved the network: then stop here, before anything changes.
@@ -206,9 +208,13 @@ final class HomeMode {
                 measureMemory(c, adb, ORIGINAL);
             }
             busy(c, Ui.tr("Trocando o Início e a tela de descanso…", "Switching the home screen and screensaver…"));
+            Watchdog.clear(c);
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
             adb.shell("settings put secure screensaver_components " + DREAM);
+            JSONObject started = state(c);
+            started.put("mode", FREE).put("homeReverted", false).put("setupHome", setupHome);
+            save(c, started);
             List<String> targets = targets(home, dream, setupHome);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
             Set<String> present = packages(adb, "");
@@ -218,10 +224,15 @@ final class HomeMode {
                 busy(c, Ui.tr("Desligando apps (", "Turning off apps (") + done + "/" + targets.size() + ")…");
                 if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg)) continue;
                 String out = adb.shell("pm disable-user --user 0 " + pkg);
-                if (out.contains("disabled-user")) disabled.add(pkg);
-                else AppLog.w("could not turn off " + pkg + ": " + out.trim());
+                if (out.contains("disabled-user")) {
+                    disabled.add(pkg);
+                    JSONObject now = state(c);
+                    now.put("disabled", new JSONArray(sorted(disabled)));
+                    save(c, now);
+                } else {
+                    AppLog.w("could not turn off " + pkg + ": " + out.trim());
+                }
             }
-            Watchdog.clear(c);
             s = state(c);
             s.put("mode", FREE).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(sorted(disabled))).put("setupHome", setupHome);
@@ -251,7 +262,7 @@ final class HomeMode {
             busy(c, Ui.tr("Religando os apps…", "Turning the apps back on…"));
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
-            for (String pkg : targets(home, s.optString("originalDream", ""), true)) {
+            for (String pkg : targets(home, originalDream(s), true)) {
                 if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
             }
             Set<String> present = packages(adb, "");
@@ -267,7 +278,7 @@ final class HomeMode {
             }
             busy(c, Ui.tr("Devolvendo o Início original…", "Restoring the original home screen…"));
             boolean homeOk = restoreHome(adb, home);
-            adb.shell("settings delete secure screensaver_components");
+            restoreScreensaver(adb, s);
             try {
                 remoteService(c, adb, false);
             } catch (IOException e) {
@@ -310,20 +321,27 @@ final class HomeMode {
     /** Safety net: our home screen crashed 3 times in a row. Only the home screen goes back; the rest stays. */
     static void revertHomeNow(Context app) {
         synchronized (RUN) {
+            JSONObject s = state(app);
             try (Adb adb = Adb.connect(app, 10_000, null)) {
-                JSONObject s = state(app);
+                boolean ours = homeHolder(adb).contains(PKG);
+                if (!ours && (!FREE.equals(s.optString("mode")) || s.optBoolean("homeReverted"))) return;
                 String home = originalHome(s);
                 adb.shell("pm enable " + GOOGLE_SETUP);
-                restoreHome(adb, home);
-                String homePkg = packageOf(home);
+                if (!restoreHome(adb, home)) {
+                    AppLog.w("could not give the home screen back");
+                    return;
+                }
+                String homePkg = packageOf(home), dreamPkg = packageOf(originalDream(s));
+                if (dreamPkg != null) adb.shell("pm enable " + dreamPkg);
                 JSONArray kept = new JSONArray();
                 for (String pkg : stringList(s, "disabled")) {
-                    if (!pkg.equals(GOOGLE_SETUP) && !pkg.equals(homePkg)) kept.put(pkg);
+                    if (!pkg.equals(GOOGLE_SETUP) && !pkg.equals(homePkg) && !pkg.equals(dreamPkg)) kept.put(pkg);
                 }
                 s.put("homeReverted", true).put("disabled", kept);
                 save(app, s);
                 notice(app, Ui.tr("O Início do Free My TV caiu 3 vezes seguidas; voltei para o Início original.",
                         "Free My TV's home screen crashed 3 times in a row; I switched back to the original one."));
+                restoreScreensaver(adb, s);
                 adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             } catch (Exception e) {
                 AppLog.w("could not give the home screen back: " + e.getMessage());
@@ -343,6 +361,7 @@ final class HomeMode {
             boolean updated = !fingerprint.equals(s.optString("fingerprint", fingerprint));
             try {
                 s.put("fingerprint", fingerprint);
+                s.remove("busy");
                 save(app, s);
             } catch (JSONException ignored) {}
             if (!FREE.equals(s.optString("mode"))) return;
@@ -354,8 +373,11 @@ final class HomeMode {
                 boolean reverted = s.optBoolean("homeReverted");
                 String home = originalHome(s);
                 Set<String> wanted = new HashSet<>(stringList(s, "disabled"));
-                for (String pkg : targets(home, s.optString("originalDream", ""), s.optBoolean("setupHome", true))) {
-                    if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP))) wanted.add(pkg);
+                String dream = originalDream(s);
+                for (String pkg : targets(home, dream, s.optBoolean("setupHome", true))) {
+                    if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP) || pkg.equals(packageOf(dream)))) {
+                        wanted.add(pkg);
+                    }
                 }
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
                 for (String pkg : sorted(wanted)) {
@@ -373,7 +395,7 @@ final class HomeMode {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("o Início", "the home screen"));
                 }
-                if (!adb.shell("settings get secure screensaver_components").contains(DREAM)) {
+                if (!reverted && !adb.shell("settings get secure screensaver_components").contains(DREAM)) {
                     adb.shell("settings put secure screensaver_components " + DREAM);
                     fixed.add(Ui.tr("a tela de descanso", "the screensaver"));
                 }
@@ -461,13 +483,36 @@ final class HomeMode {
      * answers the Home button. Treat that as launcherx, or it stays on and "original" restores the recovery screen.
      */
     private static String realHome(String home) {
-        return home.startsWith(GOOGLE_SETUP + "/") ? GOOGLE_HOME : home;
+        return home.startsWith(GOOGLE_SETUP + "/") ? GOOGLE_HOME : safeComponent(home);
+    }
+
+    private static String originalDream(JSONObject s) {
+        return safeComponent(s.optString("originalDream", ""));
+    }
+
+    private static final Pattern COMPONENT = Pattern.compile("[A-Za-z][\\w.]*/[\\w.]+");
+
+    private static String safeComponent(String component) {
+        return COMPONENT.matcher(component).matches() ? component : "";
+    }
+
+    private static String safeComponents(String components) {
+        for (String one : components.split(",")) {
+            if (safeComponent(one).isEmpty()) return "";
+        }
+        return components;
+    }
+
+    private static void restoreScreensaver(Adb adb, JSONObject s) throws IOException {
+        String saver = safeComponents(s.optString("originalScreensaver", ""));
+        if (saver.isEmpty()) adb.shell("settings delete secure screensaver_components");
+        else adb.shell("settings put secure screensaver_components " + saver);
     }
 
     /** The system's default screensaver ("package/service"), or "". */
     private static String defaultDream(Adb adb) throws IOException {
         String d = adb.shell("settings get secure screensaver_default_component").trim();
-        return d.contains("/") && !d.startsWith(PKG + "/") ? d : "";
+        return d.contains("/") && !d.startsWith(PKG + "/") ? safeComponent(d) : "";
     }
 
     private static String packageOf(String component) {
@@ -610,7 +655,7 @@ final class HomeMode {
 
     private static void busy(Context c, String text) {
         JSONObject s = state(c);
-        try { s.put("busy", text).put("error", ""); } catch (JSONException ignored) {}
+        try { s.put("busy", text).put("busyAt", SystemClock.elapsedRealtime()).put("error", ""); } catch (JSONException ignored) {}
         save(c, s);
     }
 
