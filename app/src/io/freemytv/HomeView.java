@@ -2308,6 +2308,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (lightGradient == null) lightGradient = new LinearGradient(0, 0, 0, h, 0xFFF5F5F7, 0xFFE2E2E7, Shader.TileMode.CLAMP);
             if (nightGradient == null) nightGradient = new LinearGradient(0, 0, 0, h, 0xFF1C1C1E, 0xFF0B0B0D, Shader.TileMode.CLAMP);
             fill.setColorFilter(v);
+            fill.setColor(0xFF000000);
             if (night < 0.999f) {
                 fill.setShader(lightGradient);
                 c.drawRect(screen, fill);
