@@ -93,6 +93,13 @@ final class German {
             case "Light": return "Hell";
             case "Dark": return "Dunkel";
             case "Weather widget": return "Wetter-Widget";
+            case "City": return "Stadt";
+            case "Searching…": return "Suche…";
+            case "Type the city's name": return "Namen der Stadt eingeben";
+            case "Search": return "Suchen";
+            case "Cancel": return "Abbrechen";
+            case "No city with that name.": return "Keine Stadt mit diesem Namen.";
+            case "Couldn't search now: ": return "Suche gerade nicht möglich: ";
             case "Quotes widget": return "Kurs-Widget";
             case "On": return "An";
             case "Off": return "Aus";
