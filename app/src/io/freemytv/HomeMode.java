@@ -72,6 +72,8 @@ final class HomeMode {
         // Xiaomi
         "com.miui.tv.analytics", "com.xiaomi.statistic",                              // telemetry
         "com.mitv.tvhome.mitvplus", "com.xm.webcontent",                              // Mi TV+ promo channels, promo web content
+        // Amazon
+        "com.amazon.ftv.screensaver", "com.amazon.tv.ftvambient",
     };
 
     /** The voice assistant, only with disable_assistant=true in config.properties (the mic button stops working). */
@@ -116,6 +118,22 @@ final class HomeMode {
 
     /** Asks the main process to switch (the settings screen calls this). */
     static void request(Context c, String mode) {
+        boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+        if (isAmazon) {
+            JSONObject s = state(c);
+            try {
+                s.put("mode", mode);
+                s.put("since", System.currentTimeMillis());
+                s.put("homeReverted", false);
+                s.remove("notice");
+                s.remove("busy");
+                save(c, s);
+            } catch (Exception ignored) {}
+            if (FREE.equals(mode)) {
+                ensureRemoteServiceNow(c);
+            }
+            return;
+        }
         ModeJob.schedule(c, ModeJob.APPLY, mode, 0);
     }
 
@@ -144,7 +162,37 @@ final class HomeMode {
         if (RemoteKeys.supported()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
     }
 
+    static void ensureScreensaverNow(Context app) {
+        try {
+            android.provider.Settings.Secure.putString(app.getContentResolver(),
+                    "screensaver_components", DREAM);
+            android.provider.Settings.Secure.putString(app.getContentResolver(),
+                    "screensaver_default_component", DREAM);
+            android.provider.Settings.Secure.putInt(app.getContentResolver(),
+                    "screensaver_enabled", 1);
+            android.provider.Settings.Secure.putInt(app.getContentResolver(),
+                    "screensaver_activate_on_sleep", 1);
+            android.provider.Settings.Secure.putInt(app.getContentResolver(),
+                    "screensaver_activate_on_dock", 1);
+        } catch (Exception ignored) {}
+    }
+
     static void ensureRemoteServiceNow(Context app) {
+        ensureScreensaverNow(app);
+        try {
+            String current = android.provider.Settings.Secure.getString(app.getContentResolver(),
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (current == null || !current.contains(REMOTE_SERVICE)) {
+                String newVal = (current == null || current.isEmpty() || "null".equals(current))
+                        ? REMOTE_SERVICE : current + ":" + REMOTE_SERVICE;
+                android.provider.Settings.Secure.putString(app.getContentResolver(),
+                        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newVal);
+            }
+            android.provider.Settings.Secure.putInt(app.getContentResolver(),
+                    android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, 1);
+        } catch (Exception ignored) {}
+        boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+        if (isAmazon) return;
         if (!RemoteKeys.supported() || !FREE.equals(state(app).optString("mode"))) return;
         try (Adb adb = Adb.connect(app, 10_000, null)) {
             remoteService(app, adb, true);
@@ -190,6 +238,22 @@ final class HomeMode {
 
     static void applyNow(Context c, String mode) {
         synchronized (RUN) {
+            boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+            if (isAmazon) {
+                JSONObject s = state(c);
+                try {
+                    s.put("mode", mode);
+                    s.put("since", System.currentTimeMillis());
+                    s.put("homeReverted", false);
+                    s.remove("notice");
+                    s.remove("busy");
+                    save(c, s);
+                } catch (Exception ignored) {}
+                if (FREE.equals(mode)) {
+                    ensureRemoteServiceNow(c);
+                }
+                return;
+            }
             if (FREE.equals(mode)) applyFree(c); else applyOriginal(c);
         }
     }
@@ -344,6 +408,8 @@ final class HomeMode {
 
     /** Safety net: our home screen crashed 3 times in a row. The home screen and the screensaver go back; the rest stays. */
     static void revertHomeNow(Context app) {
+        boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+        if (isAmazon) return;
         synchronized (RUN) {
             JSONObject s = state(app);
             try (Adb adb = Adb.connect(app, 10_000, null)) {
@@ -381,6 +447,11 @@ final class HomeMode {
      */
     static void verifyNow(Context app) {
         synchronized (RUN) {
+            boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+            if (isAmazon) {
+                ensureRemoteServiceNow(app);
+                return;
+            }
             JSONObject s = state(app);
             String fingerprint = Build.FINGERPRINT;
             boolean updated = !fingerprint.equals(s.optString("fingerprint", fingerprint));
@@ -594,6 +665,8 @@ final class HomeMode {
 
     /** Two minutes after a switch (the home screen settled, caches trimmed). */
     static void measureMemoryNow(Context c, String mode) {
+        boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+        if (isAmazon) return;
         synchronized (RUN) {
             if (!mode.equals(state(c).optString("mode"))) return;
             try (Adb adb = Adb.connect(c, 10_000, null)) {
@@ -659,7 +732,8 @@ final class HomeMode {
 
     private static JSONObject defaults() {
         try {
-            return new JSONObject().put("mode", ORIGINAL);
+            boolean isAmazon = "Amazon".equalsIgnoreCase(Build.MANUFACTURER) || "Amazon".equalsIgnoreCase(Build.BRAND);
+            return new JSONObject().put("mode", isAmazon ? FREE : ORIGINAL);
         } catch (JSONException e) {
             return new JSONObject();
         }

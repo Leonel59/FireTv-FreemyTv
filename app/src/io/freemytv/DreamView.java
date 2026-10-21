@@ -224,9 +224,9 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         // Without photos (the clock over the aurora).
         datePaint = Ui.text(Ui.semibold, 36 * k, 0xD9FFFFFF);
         datePaint.setTextAlign(Paint.Align.CENTER);
-        clockPaint = Ui.numbers(Ui.thin, 280 * k, 0xF2FFFFFF);
+        clockPaint = Ui.numbers(Ui.ndot != null ? Ui.ndot : Ui.thin, 240 * k, 0xF2FFFFFF);
         clockPaint.setTextAlign(Paint.Align.CENTER);
-        clockPaint.setLetterSpacing(-0.01f);
+        clockPaint.setLetterSpacing(0.035f);
         weatherPaint = Ui.numbers(Ui.medium, 30 * k, 0xC7FFFFFF);
         weatherDim = Ui.numbers(Ui.regular, 28 * k, 0x80FFFFFF);
         quotePaint = Ui.numbers(Ui.medium, 24 * k, 0x99FFFFFF);
@@ -236,7 +236,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         cornerDate = Ui.numbers(Ui.semibold, 30 * k, 0xEBFFFFFF);
         cornerQuote = Ui.numbers(Ui.regular, 23 * k, 0xC7FFFFFF);
         cornerStale = Ui.text(Ui.medium, 21 * k, 0x99FFFFFF);
-        cornerClock = Ui.numbers(Ui.displaySemibold, CLOCK_SIZE * k, 0xF2FFFFFF);
+        cornerClock = Ui.numbers(Ui.ndot != null ? Ui.ndot : Ui.displaySemibold, CLOCK_SIZE * k, 0xF2FFFFFF);
+        cornerClock.setLetterSpacing(0.035f);
         labelPaint = Ui.text(Ui.medium, 25 * k, 0xB8FFFFFF);
         labelPaint.setLetterSpacing(0.1f);
         titlePaint = new TextPaint(Ui.text(Ui.displayMedium, 76 * k, 0xFFFFFFFF));

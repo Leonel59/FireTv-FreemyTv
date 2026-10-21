@@ -24,10 +24,10 @@ final class RemoteKeys {
      * The key codes are the brand's own: on other brands they can be other buttons, so nothing here runs there.
      * Vestel builds TVs sold under other brands (F&U...), so BRAND varies: check the maker too.
      */
-    static final boolean TCL = is("TCL"), VESTEL = is("Vestel");
+    static final boolean TCL = is("TCL"), VESTEL = is("Vestel"), AMAZON = is("Amazon");
 
     static boolean supported() {
-        return TCL || VESTEL;
+        return TCL || VESTEL || AMAZON;
     }
 
     private static boolean is(String maker) {

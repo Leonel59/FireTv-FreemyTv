@@ -33,7 +33,7 @@ final class Ui {
     static volatile String language = language();
     static volatile boolean en = "en".equals(language), es = "es".equals(language), de = "de".equals(language),
             ru = "ru".equals(language);
-    static Typeface thin, light, displayMedium, displaySemibold, regular, medium, semibold;
+    static Typeface thin, light, displayMedium, displaySemibold, regular, medium, semibold, ndot;
     private static boolean loaded;
     private static final Rect BOUNDS = new Rect();
     private static final RectF OVAL = new RectF();
@@ -49,6 +49,9 @@ final class Ui {
         regular = font(a, 14, 400);
         medium = font(a, 14, 500);
         semibold = font(a, 14, 600);
+        try {
+            ndot = Typeface.createFromAsset(a, "fonts/Ndot55-Regular.otf");
+        } catch (Exception ignored) {}
     }
 
     /** Inter at an optical size (14 = text, 32 = display) and weight; the system font if the file is missing. */

@@ -1004,7 +1004,20 @@ public class SettingsActivity extends Activity {
                 screen = REMOTE_KEYS;
                 focus = 0;
             } else {
-                activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                try {
+                    Intent tvSettings = new Intent("amazon.intent.action.MAINSETTINGS");
+                    tvSettings.setComponent(new ComponentName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity"));
+                    tvSettings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    if (activity.getPackageManager().resolveActivity(tvSettings, 0) != null) {
+                        activity.startActivity(tvSettings);
+                    } else {
+                        activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    }
+                } catch (Exception e) {
+                    try {
+                        activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception ignored) {}
+                }
             }
             for (Spring s : pop) s.snap(0);
             invalidate();

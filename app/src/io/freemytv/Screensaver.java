@@ -1,11 +1,12 @@
 package io.freemytv;
 
 import android.service.dreams.DreamService;
+import android.view.KeyEvent;
 
 /**
- * The Free My TV screensaver (enabled in Free My TV mode via `settings put secure screensaver_components`). The system
- * still decides when it starts and when the TV turns off (e.g. after 10 min idle, then 2 h later), as before: the app
- * doesn't change those timings. Any key exits.
+ * The Free My TV screensaver (enabled in Free My TV mode via `settings put secure screensaver_components`).
+ * On Fire TV, we setInteractive(true) so that Bluetooth remote battery/keepalive reports do not prematurely
+ * wake the dream; an explicit key press wakes up.
  */
 public class Screensaver extends DreamService {
     private DreamView view;
@@ -14,11 +15,19 @@ public class Screensaver extends DreamService {
         super.onAttachedToWindow();
         Watchdog.install(this);
         Ui.init(this);
-        setInteractive(false);
+        setInteractive(true);
         setFullscreen(true);
         setScreenBright(true);
         view = new DreamView(this);
         setContentView(view);
+    }
+
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event != null && event.getAction() == KeyEvent.ACTION_UP) {
+            wakeUp();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override public void onDreamingStarted() {
@@ -36,3 +45,4 @@ public class Screensaver extends DreamService {
         super.onDetachedFromWindow();
     }
 }
+

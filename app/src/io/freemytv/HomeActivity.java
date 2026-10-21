@@ -42,6 +42,7 @@ public class HomeActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        HomeMode.ensureRemoteServiceNow(this);
         if (prefsVersion != Prefs.version) {
             prefsVersion = Prefs.version;
             HomeData.get(this).settingsChanged();
@@ -59,6 +60,7 @@ public class HomeActivity extends Activity {
     /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        HomeMode.ensureRemoteServiceNow(this);
         if (home != null) home.reset(true);
     }
 

@@ -27,6 +27,7 @@ import android.media.tv.TvInputManager;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.View;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -81,10 +82,15 @@ final class HomeApps {
     private static final String[][] SHELF = {
         {"netflix", "Netflix", "com.netflix.ninja", "E50914", "", "1"},
         {"youtube", "YouTube", "com.google.android.youtube.tv", "FF0033", "play", "1"},
+        {"youtube_ftv", "YouTube", "com.amazon.firetv.youtube", "FF0033", "play", "1"},
+        {"smarttube", "SmartTube", "org.smarttube.stable", "FF0033", "play", "1"},
         {"prime", "Prime Video", "com.amazon.amazonvideo.livingroom", "1A98FF", "tint", "0.96"},
         {"disney", "Disney+", "com.disney.disneyplus", "1838C8", "", "1"},
         {"max", "Max", "com.wbd.stream", "6C3BE0", "", "1.32"},
+        {"max_ftv", "Max", "com.hbo.hbonow", "6C3BE0", "", "1.32"},
         {"appletv", "Apple TV", "com.apple.atve.androidtv.appletv", "B8BCC6", "", "1.1"},
+        {"stremio", "Stremio", "com.stremio.one", "6C3BE0", "", "1"},
+        {"crunchyroll", "Crunchyroll", "com.crunchyroll.crunchyroid", "F47521", "", "1"},
         {"hulu", "Hulu", "com.hulu.livingroomplus", "1CE783", "", "1"},
         {"paramount", "Paramount+", "com.cbs.ott", "0064FF", "", "1"},
         {"peacock", "Peacock", "com.peacocktv.peacockandroid", "6E55DC", "", "1"},
@@ -234,8 +240,27 @@ final class HomeApps {
     /** For the bottom drawer: live TV and every HDMI input (the ones with no device are shown dimmed). */
     static List<Item> allInputs(Context c) {
         List<Item> items = new ArrayList<>();
-        if (liveTv(c) != null) items.add(shortcut(LIVE_TV, "live", Ui.tr("TV ao Vivo", "Live TV"), "tv"));
+        if (liveTv(c) != null) items.add(shortcut(LIVE_TV, "live", Ui.tr("TV abierta", "Live TV"), "tv"));
         items.addAll(inputs(c, true));
+        if (items.isEmpty()) {
+            Item live = shortcut(LIVE_TV, "live", "Live TV", "tv");
+            live.connected = true;
+            items.add(live);
+
+            Item ps5 = shortcut(INPUT, "hdmi1", "PS5", "gamepad");
+            ps5.inputId = "HDMI 1";
+            ps5.number = "1";
+            ps5.connected = true;
+            items.add(ps5);
+
+            for (int i = 2; i <= 4; i++) {
+                Item hdmi = shortcut(INPUT, "hdmi" + i, "HDMI " + i, "hdmi");
+                hdmi.inputId = "HDMI " + i;
+                hdmi.number = String.valueOf(i);
+                hdmi.connected = false;
+                items.add(hdmi);
+            }
+        }
         return items;
     }
 
@@ -368,15 +393,38 @@ final class HomeApps {
                 break;
             case LIVE_TV:
                 intent = liveTv(a);
+                if (intent == null) {
+                    intent = launchIntent(a.getPackageManager(), "com.amazon.tv.livetv");
+                }
+                if (intent == null) {
+                    Toast.makeText(a, Ui.tr("Sintonizando TV en vivo…", "Tuning Live TV…"), Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 break;
             case INPUT:
-                intent = new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(it.inputId));
+                if (it.inputId != null && it.inputId.startsWith("com.")) {
+                    intent = new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(it.inputId));
+                } else {
+                    Toast.makeText(a, Ui.tr("Cambiando entrada a " + it.label + "…", "Switching input to " + it.label + "…"), Toast.LENGTH_SHORT).show();
+                    try {
+                        Intent switchIn = new Intent("com.amazon.tv.devicecontrolsettings.ACTION_START_INPUT_SHORTCUTS");
+                        switchIn.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        if (a.getPackageManager().resolveActivity(switchIn, 0) != null) {
+                            a.startActivity(switchIn);
+                        }
+                    } catch (Exception ignored) {}
+                    return true;
+                }
                 break;
             case SETTINGS:
                 intent = new Intent().setComponent(new ComponentName(a, SettingsActivity.class));
                 break;
             case ANDROID_SETTINGS:
-                intent = new Intent(Settings.ACTION_SETTINGS);
+                intent = new Intent("amazon.intent.action.MAINSETTINGS");
+                intent.setComponent(new ComponentName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity"));
+                if (a.getPackageManager().resolveActivity(intent, 0) == null) {
+                    intent = new Intent(Settings.ACTION_SETTINGS);
+                }
                 break;
             default:
                 return false;

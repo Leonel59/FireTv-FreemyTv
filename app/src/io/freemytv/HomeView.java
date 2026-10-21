@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
@@ -138,8 +139,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int tab, topIndex, cardIndex;
     private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
-    private final Spring[] topFocus = new Spring[6];
-    private final RectF[] topRects = new RectF[6];
+    private final Spring[] topFocus = new Spring[8];
+    private final RectF[] topRects = new RectF[8];
     private final Spring[] cardFocus = new Spring[3];
     private final RectF[] cardRects = new RectF[3];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
@@ -151,16 +152,36 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Spring[] tileFocus = new Spring[0];
     private RectF[] tileRects = new RectF[0];
     private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the focused tile
-    /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
-    private static final Map<String, int[]> TILE_STYLE = new HashMap<>();
-    static {
-        TILE_STYLE.put("netflix", new int[] {0xFF0A0A0A, 0xFF000000, 0});
-        TILE_STYLE.put("youtube", new int[] {0xFF1C1C1E, 0xFF09090A, 0});
-        TILE_STYLE.put("globoplay", new int[] {0xFFFF8A1F, 0xFFFF2D5A, 1});
-        TILE_STYLE.put("prime", new int[] {0xFF2AA8FF, 0xFF0A68D4, 1});
-        TILE_STYLE.put("disney", new int[] {0xFF173584, 0xFF08143F, 0});
-        TILE_STYLE.put("max", new int[] {0xFF5C30E8, 0xFF221684, 0});
-        TILE_STYLE.put("appletv", new int[] {0xFF1C1C1E, 0xFF000000, 0});
+    /**
+     * macOS-inspired tile styles:
+     * By day (light theme): rich, radiant gradients and pearlescent squircles so icons never look like harsh black blocks on the white liquid glass dock.
+     * By night (dark theme): deep velvet and smoked gradients.
+     */
+    private static int[] tileStyle(HomeApps.Item it, boolean dark) {
+        String key = it != null && it.key != null ? it.key : "";
+        if (!dark) {
+            if ("netflix".equals(key)) return new int[] {0xFFE50914, 0xFF9E0B0F, 1};
+            if ("youtube".equals(key) || "youtube_ftv".equals(key)) return new int[] {0xFFFF2647, 0xFFCC0028, 1};
+            if ("smarttube".equals(key)) return new int[] {0xFFFF3355, 0xFFCC0028, 1};
+            if ("prime".equals(key)) return new int[] {0xFF2AA8FF, 0xFF0A68D4, 1};
+            if ("disney".equals(key)) return new int[] {0xFF2052D9, 0xFF0F2B85, 0};
+            if ("max".equals(key) || "max_ftv".equals(key)) return new int[] {0xFF6B3CF6, 0xFF2F1CA8, 0};
+            if ("globoplay".equals(key)) return new int[] {0xFFFF8A1F, 0xFFFF2D5A, 1};
+            if ("spotify".equals(key)) return new int[] {0xFF1ED760, 0xFF107C32, 1};
+            if ("appletv".equals(key)) return new int[] {0xFFF5F6F9, 0xFFCBD0DC, 2};
+            return new int[] {0xFFFFFFFF, 0xFFE0E4ED, 0};
+        } else {
+            if ("netflix".equals(key)) return new int[] {0xFF1C1C20, 0xFF08080A, 0};
+            if ("youtube".equals(key) || "youtube_ftv".equals(key)) return new int[] {0xFF202024, 0xFF0C0C0E, 0};
+            if ("smarttube".equals(key)) return new int[] {0xFF202024, 0xFF0C0C0E, 0};
+            if ("prime".equals(key)) return new int[] {0xFF2AA8FF, 0xFF0A68D4, 1};
+            if ("disney".equals(key)) return new int[] {0xFF173584, 0xFF08143F, 0};
+            if ("max".equals(key) || "max_ftv".equals(key)) return new int[] {0xFF5C30E8, 0xFF221684, 0};
+            if ("globoplay".equals(key)) return new int[] {0xFFFF8A1F, 0xFFFF2D5A, 1};
+            if ("spotify".equals(key)) return new int[] {0xFF1ED760, 0xFF107C32, 1};
+            if ("appletv".equals(key)) return new int[] {0xFF24242A, 0xFF0F0F12, 0};
+            return new int[] {0xFF202024, 0xFF0F0F12, 0};
+        }
     }
     private final android.graphics.PorterDuffColorFilter whiteLogo =
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
@@ -197,6 +218,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final RectF heroButton = new RectF();
     private Backdrop bgFrom, bgTo;     // null = gradient (no photo)
     private final int[] frostMix = new int[Backdrop.FW * Backdrop.FH];
+    private Bitmap wallpaperBitmap;
+    private int[] wallpaperFrostPx;
+    private int[] wallpaperGlassPx;
 
     // Bottom drawer
     private List<HomeApps.Item> drawerItems = new ArrayList<>();
@@ -373,7 +397,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < topFocus.length; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
         }
@@ -391,6 +415,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         setShelf(HomeApps.shelf(a, false));
         setStatusItems(statusList(a));
         setDrawerItems(drawerList(a));
+        loadWallpaper(a);
+    }
+
+    private void loadWallpaper(Context c) {
+        try (java.io.InputStream in = c.getAssets().open("wallpaper.jpg")) {
+            Bitmap raw = BitmapFactory.decodeStream(in);
+            if (raw != null) {
+                wallpaperBitmap = Bitmap.createScaledBitmap(raw, 1920, 1080, true);
+                if (raw != wallpaperBitmap) raw.recycle();
+                wallpaperFrostPx = Backdrop.reduce(wallpaperBitmap, Backdrop.FW, Backdrop.FH, 3, 3);
+                wallpaperGlassPx = Backdrop.reduce(wallpaperBitmap, Backdrop.GW, Backdrop.GH, 2, 2);
+            }
+        } catch (Exception e) {
+            AppLog.w("wallpaper load failed: " + e.getMessage());
+        }
     }
 
     // MARK: - Lifecycle (called by HomeActivity)
@@ -464,12 +503,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         motionDirty = true;
     }
 
-    /** The three corner buttons, with their names in the current language. */
+    private Boolean manualNight = null;
+
+    /** The corner buttons: Live TV, HDMI, Theme (Light/Dark), and Settings. */
     private void makeLightButtons() {
         lightButtons.clear();
-        lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV aberta", "Live TV"), "live_tv"));
+        lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV abierta", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
+        String themeLabel = nightTarget ? Ui.tr("Modo claro", "Light mode") : Ui.tr("Modo oscuro", "Dark mode");
+        String themeIcon = nightTarget ? "sunny" : "clear_night";
+        lightButtons.add(HomeApps.action(8, "theme", themeLabel, themeIcon));
         lightButtons.add(HomeApps.action(HomeApps.SETTINGS, "settings", Ui.tr("Configurações", "Settings"), "settings"));
+    }
+
+    private void toggleTheme() {
+        boolean toNight = !nightTarget;
+        nightTarget = toNight;
+        manualNight = toNight;
+        nightFrom = night;
+        nightAt = SystemClock.uptimeMillis();
+        tileShaders = new LinearGradient[0];
+        makeLightButtons();
+        layoutLight();
+        motionDirty = true;
+        invalidateAll();
+        showToast(toNight ? Ui.tr("Modo oscuro activado", "Dark Mode on") : Ui.tr("Modo claro activado (Apple TV Liquid Glass)", "Light Mode on (Apple TV)"));
     }
 
     private static String[] tabs() {
@@ -563,8 +621,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         titlePaint.setLetterSpacing(0.005f);
         metaPaint = Ui.text(Ui.medium, 29 * k, 0xD1FFFFFF);
         metaPaint.setLetterSpacing(0.014f);
-        clockPaint = Ui.numbers(Ui.thin, 176 * k, 0xFFFFFFFF);
-        clockPaint.setLetterSpacing(-0.01f);
+        clockPaint = Ui.numbers(Ui.ndot != null ? Ui.ndot : Ui.thin, 160 * k, 0xFFFFFFFF);
+        clockPaint.setLetterSpacing(0.035f);
         for (Paint p : new Paint[] {labelPaint, titlePaint, metaPaint, clockPaint}) p.setShadowLayer(22 * k, 0, 2 * k, 0x59000000);
         lTitle = Ui.text(Ui.displaySemibold, 76 * k, L_INK);
         lTitle.setLetterSpacing(0.004f);
@@ -577,8 +635,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
         lDate = Ui.text(Ui.semibold, 34 * k, L_DIM);
-        lClock = Ui.numbers(Ui.light, 200 * k, L_INK);
-        lClock.setLetterSpacing(-0.01f);
+        lClock = Ui.numbers(Ui.ndot != null ? Ui.ndot : Ui.light, 175 * k, L_INK);
+        lClock.setLetterSpacing(0.035f);
         lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
         lightGradient = null;
@@ -658,8 +716,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (heroMoving || heroDirty || heroFading) heroLayer.invalidate();
         if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
-        if (drawerMoving || bgFading) sky.invalidate();
-        if (bgFading || (drawerWasMoving && !drawerMoving)) platter.invalidate();
+        if (drawerMoving || bgFading || nightMoving) sky.invalidate();
+        if (bgFading || (drawerWasMoving && !drawerMoving) || nightMoving) platter.invalidate();
         drawerWasMoving = drawerMoving;
         tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = false;
         if (updateClock()) {
@@ -843,8 +901,33 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return glassNight;
     }
 
-    /** No photo: the glass reads the background's own gray (not Scene's default aurora, which isn't on screen). */
+    /** No photo: the glass reads the wallpaper or background's own gray (not Scene's default aurora). */
     private void neutralGlass() {
+        if (wallpaperGlassPx != null && wallpaperFrostPx != null) {
+            if (night < 0.05f) {
+                // Apple TV White Liquid Glass: luminous white frosted liquid glass
+                java.util.Arrays.fill(neutralFrostPx, 0xFFFFFFFF);
+                java.util.Arrays.fill(neutralGlassPx, 0xFFF5F5FA);
+                scene.setFrost(neutralFrostPx);
+                scene.setGlassImage(neutralGlassPx);
+            } else if (night >= 0.95f) {
+                // Dark Mode: dark wallpaper liquid glass reflection
+                scene.setFrost(wallpaperFrostPx);
+                scene.setGlassImage(wallpaperGlassPx);
+            } else {
+                // Transition blend between Apple TV white glass and dark wallpaper glass
+                for (int i = 0; i < wallpaperFrostPx.length; i++) {
+                    neutralFrostPx[i] = blend(0xFFFFFFFF, wallpaperFrostPx[i], night);
+                }
+                for (int i = 0; i < wallpaperGlassPx.length; i++) {
+                    neutralGlassPx[i] = blend(0xFFF5F5FA, wallpaperGlassPx[i], night);
+                }
+                scene.setFrost(neutralFrostPx);
+                scene.setGlassImage(neutralGlassPx);
+            }
+            nightPair = false;
+            return;
+        }
         int color = blend(0xFFEBEBF0, 0xFF141416, night);
         java.util.Arrays.fill(neutralFrostPx, color);
         java.util.Arrays.fill(neutralGlassPx, color);
@@ -866,6 +949,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Day or night right now (from the sun at your location); `animate`: with the transition. */
     private void checkNight(boolean animate) {
+        if (manualNight != null) return;
         boolean want = data.isNight(System.currentTimeMillis());
         if (want == nightTarget) return;
         nightTarget = want;
@@ -1189,7 +1273,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Paint text = clock ? lClockQuote : lQuote;
         // The corner buttons' names appear in this row: the quotes fade out while one of them has focus.
         float fade = 1;
-        for (int i = 3; i < 6 && !clock; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < 3 + lightButtons.size() && !clock; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         int textColor = text.getColor();
         text.setColor(Ui.alpha(textColor, fade));
@@ -1278,8 +1362,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.3f) + tone(0.18f, 0.3f) * fc + 0.14f * Ui.clamp(l)));
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
-        int[] style = TILE_STYLE.get(it.key);
-        if (it.logo != null && style != null) {
+        int[] style = tileStyle(it, dark() >= 0.5f);
+        if (it.logo != null) {
             if (tileShaders.length != shelf.size() || tileShaderH != bh) {
                 tileShaders = new LinearGradient[shelf.size()];
                 tileShaderH = bh;
@@ -1302,13 +1386,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 tileFill.setAlpha(255);
             }
             tileFill.setShader(null);
+            if (dark() < 0.5f) {
+                border.setColor(0x18000000);
+                border.setStrokeWidth(1.2f * k);
+                c.drawRoundRect(tmp, r0, r0, border);
+            }
             c.restore();
             drawLogo(c, it, cell, s, style[2]);
-        } else if (it.logo != null) {
-            tileFill.setShader(null);
-            tileFill.setColor(0xFF161618);
-            c.drawRoundRect(cell, r, r, tileFill);
-            drawLogo(c, it, cell, s, 0);
         } else {
             if (it.tile != null) roundImage(c, it.tile, cell, r);
         }
@@ -2171,6 +2255,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             r = tileRects[shelfIndex];
         }
         click.open();
+        if ("theme".equals(it.key)) {
+            toggleTheme();
+            return;
+        }
         if (it.kind == HomeApps.ALL_APPS) {
             openSheet();
             return;
@@ -2597,7 +2685,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x = topRects[i].right + 4 * k;
         }
         float b = L_BUTTON * k, right = CONTENT_R * k, cy = L_BUTTON_CY * k;
-        for (int i = 2; i >= 0; i--) {
+        for (int i = lightButtons.size() - 1; i >= 0; i--) {
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
@@ -2638,6 +2726,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * Background: the first card's photo, heavily blurred and almost white; without it, a light gradient. At night, the
      * same photo almost black (or a dark gradient), drawn on top during the transition.
      */
+    private android.graphics.ColorFilter getWallpaperFilter(float nightVal) {
+        if (nightVal >= 0.999f) return null;
+        float lightAmount = 1.0f - nightVal;
+        float scale = 1.0f - 1.85f * lightAmount;
+        float offset = 248f * lightAmount;
+        float offsetB = 252f * lightAmount;
+        return new android.graphics.ColorMatrixColorFilter(new float[] {
+            scale, 0, 0, 0, offset,
+            0, scale, 0, 0, offset,
+            0, 0, scale, 0, offsetB,
+            0, 0, 0, 1, 0
+        });
+    }
+
     private void drawLightSky(Canvas c) {
         long up = SystemClock.uptimeMillis();
         float e = bgFadeAt == 0 ? 1 : fadeEase(bgFadeAt, up);
@@ -2645,22 +2747,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Drawer open: the background lightens (by day) or darkens (at night), as a filter on the drawing itself.
         android.graphics.ColorFilter v = veil(tone(0.32f, 0.42f) * Ui.clamp(drawer.value), blend(0xFFFFFFFF, 0xFF000000, night));
         if (bgTo == null || (fading && bgFrom == null)) {
-            if (lightGradient == null) lightGradient = new LinearGradient(0, 0, 0, h, 0xFFF5F5F7, 0xFFE2E2E7, Shader.TileMode.CLAMP);
-            if (nightGradient == null) nightGradient = new LinearGradient(0, 0, 0, h, 0xFF1C1C1E, 0xFF0B0B0D, Shader.TileMode.CLAMP);
-            fill.setColorFilter(v);
-            fill.setColor(0xFF000000);
-            if (night < 0.999f) {
-                fill.setShader(lightGradient);
-                c.drawRect(screen, fill);
+            if (wallpaperBitmap != null) {
+                android.graphics.ColorFilter wf = getWallpaperFilter(night);
+                imagePaint.setColorFilter(v != null ? v : wf);
+                drawImage(c, wallpaperBitmap, 1.0f);
+                imagePaint.setColorFilter(null);
+            } else {
+                if (lightGradient == null) lightGradient = new LinearGradient(0, 0, 0, h, 0xFFF5F5F7, 0xFFE2E2E7, Shader.TileMode.CLAMP);
+                if (nightGradient == null) nightGradient = new LinearGradient(0, 0, 0, h, 0xFF1C1C1E, 0xFF0B0B0D, Shader.TileMode.CLAMP);
+                fill.setColorFilter(v);
+                fill.setColor(0xFF000000);
+                if (night < 0.999f) {
+                    fill.setShader(lightGradient);
+                    c.drawRect(screen, fill);
+                }
+                if (night > 0.001f) {
+                    fill.setShader(nightGradient);
+                    fill.setAlpha(Math.round(255 * night));
+                    c.drawRect(screen, fill);
+                    fill.setAlpha(255);
+                }
+                fill.setShader(null);
+                fill.setColorFilter(null);
             }
-            if (night > 0.001f) {
-                fill.setShader(nightGradient);
-                fill.setAlpha(Math.round(255 * night));
-                c.drawRect(screen, fill);
-                fill.setAlpha(255);
-            }
-            fill.setShader(null);
-            fill.setColorFilter(null);
         }
         imagePaint.setColorFilter(v);
         if (fading && bgFrom != null) drawLightImage(c, bgFrom, bgTo == null ? 1 - e : 1);
@@ -2813,7 +2922,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < lightButtons.size(); i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
             cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
@@ -2867,7 +2976,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(picksOn() ? 0 : 3, Math.min(5, topIndex + dx));
+                    int next = Math.max(picksOn() ? 0 : 3, Math.min(2 + lightButtons.size(), topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
