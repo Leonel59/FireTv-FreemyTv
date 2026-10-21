@@ -138,10 +138,36 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         }
     };
 
+    private Bitmap screensaverBitmap;
+
+    private void loadScreensaver(Context c) {
+        try {
+            java.io.InputStream in = null;
+            try {
+                in = c.getAssets().open("screensaver.jpg");
+            } catch (Exception ignored) {
+                try {
+                    in = c.getAssets().open("wallpaper.jpg");
+                } catch (Exception ignored2) {}
+            }
+            if (in != null) {
+                Bitmap raw = android.graphics.BitmapFactory.decodeStream(in);
+                in.close();
+                if (raw != null) {
+                    screensaverBitmap = Bitmap.createScaledBitmap(raw, 1920, 1080, true);
+                    if (raw != screensaverBitmap) raw.recycle();
+                }
+            }
+        } catch (Exception e) {
+            AppLog.w("screensaver load failed: " + e.getMessage());
+        }
+    }
+
     DreamView(Context c) {
         super(c);
         data = HomeData.get(c);
         recs = Recs.get(c);
+        loadScreensaver(c);
         Shaders.dream(scene.palette);
         scene.setMotion(0.4f, 0.32f);
         scene.applyPalette();
@@ -164,7 +190,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         startedAt = clock();
         lastFrame = 0;
         failed.clear();
-        fallback = recs.showcase().isEmpty();
+        fallback = screensaverBitmap != null || recs.showcase().isEmpty();
         data.addListener(this);
         recs.addListener(this);
         data.refreshIfStale();
@@ -202,6 +228,10 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         worker.shutdownNow();
+        if (screensaverBitmap != null) {
+            screensaverBitmap.recycle();
+            screensaverBitmap = null;
+        }
     }
 
     @Override public void onData() {
@@ -221,17 +251,29 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         scene.setSize(w, h);
         content.setPosition(0, 0, w, h);
         chrome.setPosition(0, 0, w, h);
-        // Without photos (the clock over the aurora).
-        datePaint = Ui.text(Ui.semibold, 36 * k, 0xD9FFFFFF);
-        datePaint.setTextAlign(Paint.Align.CENTER);
+        // Without photos (the clock over the screensaver or aurora).
+        datePaint = Ui.text(Ui.semibold, 34 * k, 0xD9FFFFFF);
         clockPaint = Ui.numbers(Ui.ndot != null ? Ui.ndot : Ui.thin, 240 * k, 0xF2FFFFFF);
-        clockPaint.setTextAlign(Paint.Align.CENTER);
         clockPaint.setLetterSpacing(0.035f);
         weatherPaint = Ui.numbers(Ui.medium, 30 * k, 0xC7FFFFFF);
         weatherDim = Ui.numbers(Ui.regular, 28 * k, 0x80FFFFFF);
         quotePaint = Ui.numbers(Ui.medium, 24 * k, 0x99FFFFFF);
         stalePaint = Ui.text(Ui.regular, 20 * k, 0x59FFFFFF);
-        stalePaint.setTextAlign(Paint.Align.CENTER);
+
+        if (screensaverBitmap != null) {
+            datePaint.setTextAlign(Paint.Align.LEFT);
+            clockPaint.setTextAlign(Paint.Align.LEFT);
+            stalePaint.setTextAlign(Paint.Align.LEFT);
+            datePaint.setShadowLayer(16 * k, 0, 2 * k, 0xCC000000);
+            clockPaint.setShadowLayer(26 * k, 0, 4 * k, 0xEE000000);
+            weatherPaint.setShadowLayer(12 * k, 0, 2 * k, 0xBB000000);
+            weatherDim.setShadowLayer(12 * k, 0, 2 * k, 0xBB000000);
+            quotePaint.setShadowLayer(12 * k, 0, 2 * k, 0xBB000000);
+        } else {
+            datePaint.setTextAlign(Paint.Align.CENTER);
+            clockPaint.setTextAlign(Paint.Align.CENTER);
+            stalePaint.setTextAlign(Paint.Align.CENTER);
+        }
         // With photos: the corner (date, clock, prices) and the caption.
         cornerDate = Ui.numbers(Ui.semibold, 30 * k, 0xEBFFFFFF);
         cornerQuote = Ui.numbers(Ui.regular, 23 * k, 0xC7FFFFFF);
@@ -257,7 +299,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
     /** Loads the next photo in the background (one at a time); once ready, it comes in at the right moment. */
     private void prepareNext() {
-        if (!running || decoding || prepared != null) return;
+        if (!running || decoding || prepared != null || screensaverBitmap != null) return;
         List<Recs.Pick> list = recs.showcase();
         if (list.isEmpty()) return;
         Slide last = incoming != null ? incoming : current;
@@ -721,11 +763,15 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
     private void drawFallback(Canvas canvas, long up, float alpha) {
         float t = (up - startedAt) / 1000f;
-        if (up - lastSky >= 100) {
-            lastSky = up;
-            scene.advance(timeOffset + t);
+        if (screensaverBitmap != null) {
+            canvas.drawBitmap(screensaverBitmap, 0, 0, photoPaint);
+        } else {
+            if (up - lastSky >= 100) {
+                lastSky = up;
+                scene.advance(timeOffset + t);
+            }
+            scene.drawBackground(canvas);
         }
-        scene.drawBackground(canvas);
         if (dirty) {
             Canvas rc = content.beginRecording(w, h);
             try {
@@ -736,13 +782,57 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             dirty = false;
         }
         double phase = 2 * Math.PI * t / DRIFT_PERIOD_S;
-        content.setTranslationX((float) (40 * k * Math.sin(phase)));
-        content.setTranslationY((float) (26 * k * Math.sin(2 * phase + 0.7)));
+        content.setTranslationX((float) (20 * k * Math.sin(phase)));
+        content.setTranslationY((float) (16 * k * Math.sin(2 * phase + 0.7)));
         content.setAlpha(alpha);
         content.draw(canvas);
     }
 
     private void drawContent(Canvas c) {
+        if (screensaverBitmap != null) {
+            float left = 140 * k;
+            float clockCap = Ui.cap(clockPaint);
+            float clockBase = h * 0.50f + clockCap / 2 - 10 * k;
+            c.drawText(date, left, clockBase - clockCap - 34 * k, datePaint);
+            c.drawText(clock, left, clockBase, clockPaint);
+
+            // Weather: symbol, temperature, high and low, aligned to the left under the clock.
+            HomeData.Weather wx = data.weather;
+            if (!Double.isNaN(wx.temp) && Prefs.weather()) {
+                float base = clockBase + 76 * k;
+                String symbol = Symbols.weather(wx.code, wx.isDay);
+                String now = HomeData.degrees(wx.temp);
+                String range = Ui.ru ? "Макс. " + HomeData.degrees(wx.max) + "  Мин. " + HomeData.degrees(wx.min)
+                        : Ui.en ? "H:" + HomeData.degrees(wx.max) + "  L:" + HomeData.degrees(wx.min)
+                        : Ui.de ? "H:" + HomeData.degrees(wx.max) + "  T:" + HomeData.degrees(wx.min)
+                        : "Máx. " + HomeData.degrees(wx.max) + "  Mín. " + HomeData.degrees(wx.min);
+                float sw = Symbols.width(getContext(), symbol, 32 * k);
+                float x = left;
+                Symbols.draw(getContext(), c, symbol, x + sw / 2, base - Ui.halfCap(weatherPaint), 32 * k, 0xC7FFFFFF);
+                x += sw + 12 * k;
+                c.drawText(now, x, base, weatherPaint);
+                x += weatherPaint.measureText(now) + 18 * k;
+                c.drawText(range, x, base, weatherDim);
+            }
+
+            // Prices near the bottom edge: small white logo + value, left-aligned.
+            float cap = Ui.cap(quotePaint), spacing = 48 * k, gap = 10 * k;
+            int[] coins = HomeData.active();
+            String[] values = new String[HomeData.coinCount()];
+            float x = left, base = h - 92 * k;
+            for (int i = 0; i < values.length; i++) {
+                values[i] = HomeData.price(data.prices[coins[i]]);
+                float gw = Glyphs.width(getContext(), HomeData.COINS[coins[i]], cap);
+                Glyphs.coin(getContext(), c, HomeData.COINS[coins[i]], x + gw / 2, base - cap / 2, cap, 0x80FFFFFF);
+                x += gw + gap;
+                c.drawText(values[i], x, base, quotePaint);
+                x += quotePaint.measureText(values[i]) + spacing;
+            }
+            String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
+            if (!stale.isEmpty() && values.length > 0) c.drawText(Ui.tr("cotações de ", "prices from ") + stale, x + 8 * k, base, stalePaint);
+            return;
+        }
+
         float cx = w / 2f;
         float clockCap = Ui.cap(clockPaint);
         float clockBase = h * 0.5f + clockCap / 2 - 10 * k;
