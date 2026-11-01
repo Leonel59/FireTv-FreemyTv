@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
 final class HomeApps {
     private HomeApps() {}
 
-    static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5;
+    static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5, CLEAN_CACHE = 6;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
@@ -85,12 +85,17 @@ final class HomeApps {
         {"youtube_ftv", "YouTube", "com.amazon.firetv.youtube", "FF0033", "play", "1"},
         {"smarttube", "SmartTube", "org.smarttube.stable", "FF0033", "play", "1"},
         {"prime", "Prime Video", "com.amazon.amazonvideo.livingroom", "1A98FF", "tint", "0.96"},
+        {"prime_ftv", "Prime Video", "com.amazon.firebat", "1A98FF", "tint", "0.96"},
         {"disney", "Disney+", "com.disney.disneyplus", "1838C8", "", "1"},
         {"max", "Max", "com.wbd.stream", "6C3BE0", "", "1.32"},
         {"max_ftv", "Max", "com.hbo.hbonow", "6C3BE0", "", "1.32"},
         {"appletv", "Apple TV", "com.apple.atve.androidtv.appletv", "B8BCC6", "", "1.1"},
-        {"stremio", "Stremio", "com.stremio.one", "6C3BE0", "", "1"},
+        {"stremio", "Stremio", "com.stremio.one", "594DB2", "", "1"},
+        {"nuvio", "Nuvio", "com.nuvio.tv", "7B3FF2", "", "1"},
         {"crunchyroll", "Crunchyroll", "com.crunchyroll.crunchyroid", "F47521", "", "1"},
+        {"peacock_ftv", "Peacock", "com.peacock.peacockfiretv", "000000", "", "1"},
+        {"silk", "Internet", "com.amazon.cloud9", "00A8E1", "", "1"},
+        {"appstore", "Appstore", "com.amazon.venezia", "FF9900", "", "1"},
         {"hulu", "Hulu", "com.hulu.livingroomplus", "1CE783", "", "1"},
         {"paramount", "Paramount+", "com.cbs.ott", "0064FF", "", "1"},
         {"peacock", "Peacock", "com.peacocktv.peacockandroid", "6E55DC", "", "1"},
@@ -163,10 +168,29 @@ final class HomeApps {
     /** The shelf's packages in order: the user's list (Settings > Shelf), or the built-in one. */
     static List<String> shelfPackages(Context c) {
         List<String> custom = Prefs.shelf();
-        if (custom != null) return custom;
+        if (custom != null) {
+            List<String> clean = new ArrayList<>();
+            for (String p : custom) {
+                if (!"com.amazon.cloud9".equals(p) && !"com.amazon.venezia".equals(p)) clean.add(p);
+            }
+            if (!clean.isEmpty()) return clean;
+        }
         List<String> out = new ArrayList<>();
         PackageManager pm = c.getPackageManager();
-        for (String[] d : SHELF) if (out.size() < MAX_SHELF && launchIntent(pm, d[2]) != null) out.add(d[2]);
+        for (String[] d : SHELF) if (out.size() < MAX_SHELF && launchIntent(pm, d[2]) != null && !out.contains(d[2])) out.add(d[2]);
+        return out;
+    }
+
+    /** Finds all launchable TV and standard Android apps (including Amazon Silk Browser, Appstore, etc.). */
+    static List<ResolveInfo> queryAllLaunchable(PackageManager pm) {
+        List<ResolveInfo> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ResolveInfo ri : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0)) {
+            if (ri.activityInfo != null && seen.add(ri.activityInfo.packageName)) out.add(ri);
+        }
+        for (ResolveInfo ri : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)) {
+            if (ri.activityInfo != null && seen.add(ri.activityInfo.packageName)) out.add(ri);
+        }
         return out;
     }
 
@@ -177,8 +201,7 @@ final class HomeApps {
         Set<String> seen = new HashSet<>();
         for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
         List<String[]> more = new ArrayList<>();
-        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
-        for (ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+        for (ResolveInfo ri : queryAllLaunchable(pm)) {
             String pkg = ri.activityInfo.packageName;
             if (pkg.equals(c.getPackageName()) || HIDDEN.contains(pkg) || !seen.add(pkg)) continue;
             more.add(new String[] {pkg, String.valueOf(ri.loadLabel(pm))});
@@ -345,20 +368,16 @@ final class HomeApps {
         return "hdmi";
     }
 
-    /** Installed, enabled TV apps that are not on the home screen (the TV's Settings is among them), plus our own. */
+    /** Installed, enabled TV and standard apps in the "All Apps" / "Todas las apps" sheet, plus our own. */
     static List<Item> others(Context c) {
         PackageManager pm = c.getPackageManager();
         Set<String> skip = new HashSet<>();
-        // A built-in app is skipped only while it is on the shelf: one the person took off must still be listed here.
-        List<String> onShelf = shelfPackages(c);
-        for (String[] d : SHELF) if (onShelf.contains(d[2])) skip.add(d[2]);
         skip.addAll(java.util.Arrays.asList(LIVE_TV_APPS));
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);
-        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         List<Item> items = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        for (ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+        for (ResolveInfo ri : queryAllLaunchable(pm)) {
             String pkg = ri.activityInfo.packageName;
             if (skip.contains(pkg) || !seen.add(pkg)) continue;
             Item it = new Item();
@@ -366,13 +385,17 @@ final class HomeApps {
             it.pkg = pkg;
             it.key = pkg;
             it.label = String.valueOf(ri.loadLabel(pm));
-            it.tile = appTile(c, null, pkg, 0);
+            String[] d = known(pkg);
+            String key = d != null ? d[0] : null;
+            int brand = d != null ? (0xFF000000 | Integer.parseInt(d[3], 16)) : brandColor(pkg);
+            it.tile = appTile(c, key, pkg, brand);
             items.add(it);
         }
         Collections.sort(items, (a, b) -> a.label.toLowerCase(Locale.ROOT).compareTo(b.label.toLowerCase(Locale.ROOT)));
         synchronized (HomeApps.class) {
             TILES.keySet().removeIf(k -> k.contains(".") && !seen.contains(k));
         }
+        items.add(special(c, CLEAN_CACHE, "freemytv-clean-cache", "Limpiar Caché", "cleaner"));
         items.add(special(c, SETTINGS, "freemytv-settings", "Free My TV", "sparkles"));
         return items;
     }
@@ -418,6 +441,9 @@ final class HomeApps {
                 break;
             case SETTINGS:
                 intent = new Intent().setComponent(new ComponentName(a, SettingsActivity.class));
+                break;
+            case CLEAN_CACHE:
+                intent = new Intent().setComponent(new ComponentName(a, CacheCleanerActivity.class));
                 break;
             case ANDROID_SETTINGS:
                 intent = new Intent("amazon.intent.action.MAINSETTINGS");
@@ -489,7 +515,19 @@ final class HomeApps {
 
     static Intent launchIntent(PackageManager pm, String pkg) {
         Intent intent = pm.getLeanbackLaunchIntentForPackage(pkg);
-        return intent != null ? intent : pm.getLaunchIntentForPackage(pkg);
+        if (intent != null) return intent;
+        intent = pm.getLaunchIntentForPackage(pkg);
+        if (intent != null) return intent;
+        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg);
+        List<ResolveInfo> list = pm.queryIntentActivities(query, 0);
+        if (list != null && !list.isEmpty()) {
+            ActivityInfo ai = list.get(0).activityInfo;
+            return new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER)
+                    .setComponent(new ComponentName(ai.packageName, ai.name))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        return null;
     }
 
     // MARK: - Colored logos (shelf)
@@ -777,19 +815,55 @@ final class HomeApps {
 
     // MARK: - Cards
 
+    static int brandColor(String pkg) {
+        if (pkg == null) return 0xFF2A2D3A;
+        switch (pkg) {
+            case "com.amazon.cloud9": return 0xFF00A8E1;       // Silk Cyan
+            case "com.amazon.venezia": return 0xFFFF9900;      // Appstore Orange
+            case "com.amazon.tahoe": return 0xFF00B0FF;        // Amazon Kids Cyan/Blue
+            case "com.amazon.minitv.android.app": return 0xFFDF1B4B; // miniTV Red
+            case "com.amazon.gamehub": return 0xFF5C6BC0;      // Game Center Indigo
+            case "com.amazon.whasettings": return 0xFF455A64;  // Settings Slate
+            case "com.amazon.tv.launcher": return 0xFFFF9900;  // Home Orange
+            case "com.amazon.ftv.profilepicker": return 0xFF00BCD4; // Profile Cyan
+            case "com.amazon.ssm": return 0xFF009688;          // Teal
+            case "com.amazon.firetv.troubleshooting": return 0xFFFF9800; // Orange
+            case "jp.snowlife01.android.appkiller2": return 0xFF2E7D32; // Green
+            case "com.esaba.downloader": return 0xFFFF6600;    // Downloader Orange
+            case "com.apkmirror.helper.prod": return 0xFFF06522; // APKMirror Orange
+            case "visnkmr.apps.filexplorer": return 0xFF1976D2;// File Explorer Blue
+            case "com.dazn": return 0xFF212121;
+            case "tv.twitch.android.viewer": return 0xFF9146FF; // Twitch Purple
+            case "com.spotify.tv.android": return 0xFF1DB954;   // Spotify Green
+            case "com.stremio.one": return 0xFF594DB2;         // Stremio Purple
+            case "com.nuvio.tv": return 0xFF7B3FF2;            // Nuvio Violet
+            case "com.apple.atve.androidtv.appletv": return 0xFF22242B; // Apple TV
+            case "com.netflix.ninja": return 0xFFE50914;       // Netflix Red
+            case "com.amazon.firebat": return 0xFF1A98FF;      // Prime Video Blue
+            case "com.disney.disneyplus": return 0xFF1838C8;   // Disney+
+            case "com.hbo.hbonow": return 0xFF6C3BE0;          // Max Purple
+            case "com.crunchyroll.crunchyroid": return 0xFFF47521; // Crunchyroll Orange
+            default: return 0xFF2C2F3D;
+        }
+    }
+
     private static synchronized Bitmap appTile(Context c, String key, String pkg, int brand) {
-        String cacheKey = key != null ? key : pkg;
+        String cacheKey = (key != null ? key : pkg) + "_v4";
         if (TILES.containsKey(cacheKey)) return TILES.get(cacheKey);
         Bitmap logo = key == null ? null : ownLogo(c, key);
-        Bitmap tile = logo != null ? logoTile(logo, brand) : bannerTile(c, pkg);
-        if (tile == null) tile = iconTile(c, pkg);
+        Bitmap tile = logo != null ? logoTile(logo, brand) : bannerTile(c, pkg, brand);
+        if (tile == null) tile = iconTile(c, pkg, brand);
         tile.setHasMipMap(true);
         TILES.put(cacheKey, tile);
         return tile;
     }
 
     /** The app's official TV art (the Android TV banner), at the highest density the app has. */
-    private static Bitmap bannerTile(Context c, String pkg) {
+    private static Bitmap bannerTile(Context c, String pkg, int brand) {
+        if ("com.amazon.gamehub".equals(pkg) || "com.amazon.whasettings".equals(pkg)
+                || "com.amazon.tv.earlyaccess".equals(pkg) || "com.amazon.tv.launcher".equals(pkg)) {
+            return null; // use iconTile for beautiful modern branded symbols
+        }
         PackageManager pm = c.getPackageManager();
         Drawable d = null;
         try {
@@ -805,16 +879,53 @@ final class HomeApps {
         if (d == null) return null;
         Bitmap b = Bitmap.createBitmap(TILE_W, TILE_H, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(b);
-        canvas.drawColor(0xFF15161C);   // banners with transparency sit on a dark background
+        canvas.drawColor(brand != 0 ? brand : 0xFF15161C);
+
+        if ("com.amazon.minitv.android.app".equals(pkg)) {
+            // Give miniTV safe padding so the text doesn't touch the edges or get clipped
+            int padX = 28, padY = 20;
+            d.setBounds(padX, padY, TILE_W - padX, TILE_H - padY);
+            d.draw(canvas);
+            return b;
+        }
+
         d.setBounds(0, 0, TILE_W, TILE_H);
         d.draw(canvas);
         return b;
     }
 
-    /** No banner: the app's icon (in its proper shape, with some margin) on a dark card. */
-    private static Bitmap iconTile(Context c, String pkg) {
+    /** No banner: the app's icon, nicely sized and centered on dark glass with a brand glow. */
+    private static Bitmap iconTile(Context c, String pkg, int brand) {
         Bitmap b = darkTile();
         Canvas canvas = new Canvas(b);
+
+        int glowColor = brand != 0 ? brand : brandColor(pkg);
+        Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        glow.setShader(new RadialGradient(TILE_W / 2f, TILE_H * 0.95f, TILE_W * 0.70f,
+                Ui.alpha(glowColor, 0.48f), 0x00000000, Shader.TileMode.CLAMP));
+        canvas.drawRect(0, 0, TILE_W, TILE_H, glow);
+
+        if ("com.amazon.gamehub".equals(pkg)) {
+            Symbols.draw(c, canvas, "gamepad", TILE_W / 2f, TILE_H / 2f, TILE_H * 0.44f, 0xF2FFFFFF);
+            return b;
+        }
+        if ("com.amazon.whasettings".equals(pkg)) {
+            Symbols.draw(c, canvas, "settings", TILE_W / 2f, TILE_H / 2f, TILE_H * 0.44f, 0xF2FFFFFF);
+            return b;
+        }
+        if ("com.amazon.tv.earlyaccess".equals(pkg)) {
+            Symbols.draw(c, canvas, "sparkles", TILE_W / 2f, TILE_H / 2f, TILE_H * 0.44f, 0xF2FFFFFF);
+            return b;
+        }
+        if ("com.amazon.tv.launcher".equals(pkg)) {
+            Symbols.draw(c, canvas, "home", TILE_W / 2f, TILE_H / 2f, TILE_H * 0.44f, 0xF2FFFFFF);
+            return b;
+        }
+        if ("com.amazon.firetv.troubleshooting".equals(pkg)) {
+            Symbols.draw(c, canvas, "tv_settings", TILE_W / 2f, TILE_H / 2f, TILE_H * 0.44f, 0xF2FFFFFF);
+            return b;
+        }
+
         Drawable icon = null;
         try {
             PackageManager pm = c.getPackageManager();
@@ -829,16 +940,22 @@ final class HomeApps {
         } catch (PackageManager.NameNotFoundException ignored) {
         }
         if (icon == null) return b;
-        int size = Math.round(TILE_H * 0.56f);
+
+        int size = Math.round(TILE_H * 0.70f); // 151 px
         float left = (TILE_W - size) / 2f, top = (TILE_H - size) / 2f;
+        float r = size * 0.225f;
+
+        Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        shadow.setColor(0x55000000);
+        canvas.drawRoundRect(new RectF(left, top + 6, left + size, top + size + 6), r, r, shadow);
+
         if (icon instanceof AdaptiveIconDrawable) {
-            // Adaptive icon: the layers clipped to a squircle, like an Apple icon.
             AdaptiveIconDrawable a = (AdaptiveIconDrawable) icon;
             Path clip = new Path();
-            clip.addRoundRect(new RectF(left, top, left + size, top + size), size * 0.2237f, size * 0.2237f, Path.Direction.CW);
+            clip.addRoundRect(new RectF(left, top, left + size, top + size), r, r, Path.Direction.CW);
             canvas.save();
             canvas.clipPath(clip);
-            int pad = size / 4;
+            int pad = Math.round(size * 0.22f);
             for (Drawable layer : new Drawable[] {a.getBackground(), a.getForeground()}) {
                 if (layer == null) continue;
                 layer.setBounds(Math.round(left) - pad, Math.round(top) - pad, Math.round(left) + size + pad, Math.round(top) + size + pad);
@@ -846,11 +963,21 @@ final class HomeApps {
             }
             canvas.restore();
         } else {
-            // Legacy icon (a free-form drawing with transparency): smaller, no frame.
-            int s = Math.round(TILE_H * 0.46f);
-            icon.setBounds((TILE_W - s) / 2, (TILE_H - s) / 2, (TILE_W + s) / 2, (TILE_H + s) / 2);
+            Path clip = new Path();
+            clip.addRoundRect(new RectF(left, top, left + size, top + size), r, r, Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(clip);
+            icon.setBounds(Math.round(left), Math.round(top), Math.round(left + size), Math.round(top + size));
             icon.draw(canvas);
+            canvas.restore();
         }
+
+        Paint border = new Paint(Paint.ANTI_ALIAS_FLAG);
+        border.setStyle(Paint.Style.STROKE);
+        border.setStrokeWidth(2.0f);
+        border.setColor(0x30FFFFFF);
+        canvas.drawRoundRect(new RectF(left, top, left + size, top + size), r, r, border);
+
         return b;
     }
 
@@ -858,7 +985,15 @@ final class HomeApps {
     private static synchronized Bitmap symbolTile(Context c, String key, String symbol) {
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap b = darkTile();
-        Symbols.draw(c, new Canvas(b), symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.36f, 0xF2FFFFFF);
+        Canvas canvas = new Canvas(b);
+        if ("freemytv-clean-cache".equals(key)) {
+            Paint glow = new Paint();
+            glow.setShader(new RadialGradient(TILE_W / 2f, TILE_H * 1.15f, TILE_W * 0.75f, Ui.alpha(0x00E676, 0.45f), 0x00000000, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, TILE_W, TILE_H, glow);
+            Symbols.draw(c, canvas, symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.42f, 0xFF00E676);
+        } else {
+            Symbols.draw(c, canvas, symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.36f, 0xF2FFFFFF);
+        }
         b.setHasMipMap(true);
         TILES.put(key, b);
         return b;

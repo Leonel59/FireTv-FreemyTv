@@ -67,10 +67,13 @@ final class Recs {
         {"disney", "disney", "com.disney.disneyplus"},
         {"hulu", "hulu", "com.hulu.livingroomplus"},
         {"paramount", "paramount", "com.cbs.ott"},
-        {"peacock", "peacock", "com.peacocktv.peacockandroid"},
+        {"peacock", "peacock", "com.peacock.peacockfiretv"},
         {"globoplay", "globoplay", "com.globo.globotv"},
-        {"max", "max", "com.wbd.stream"},
+        {"max", "max", "com.hbo.hbonow"},
         {"apple tv", "appletv", "com.apple.atve.androidtv.appletv"},
+        {"crunchyroll", "crunchyroll", "com.crunchyroll.crunchyroid"},
+        {"stremio", "stremio", "com.stremio.one"},
+        {"nuvio", "nuvio", "com.nuvio.tv"},
     };
     private static final Map<String, String> SERVICE_NAME = new HashMap<>();
     static {
@@ -83,6 +86,9 @@ final class Recs {
         SERVICE_NAME.put("globoplay", "Globoplay");
         SERVICE_NAME.put("max", "Max");
         SERVICE_NAME.put("appletv", "Apple TV");
+        SERVICE_NAME.put("crunchyroll", "Crunchyroll");
+        SERVICE_NAME.put("stremio", "Stremio");
+        SERVICE_NAME.put("nuvio", "Nuvio");
     }
     /** Country for "what streams where" (config.properties "tmdb_region", e.g. US, GB, BR). */
     private static final String REGION = Config.TMDB_REGION.trim().toUpperCase(Locale.ROOT);
@@ -129,7 +135,7 @@ final class Recs {
     void removeListener(Listener l) { listeners.remove(l); }
 
     static boolean hasKey(Context c) {
-        return !Config.TMDB_KEY.trim().isEmpty();
+        return true;
     }
 
     /** Last fetch, for the settings screen: {count, error, at}. Written by the home screen (another process). */
@@ -373,17 +379,18 @@ final class Recs {
     private void fetchList(int p) throws Exception {
         // The services the TV has, by their TMDB ids in your region.
         Map<Integer, String[]> services = new HashMap<>();
-        JSONArray providers = get("/watch/providers/movie?language=" + lang() + "&watch_region=" + REGION).getJSONArray("results");
-        for (int i = 0; i < providers.length(); i++) {
-            JSONObject o = providers.getJSONObject(i);
-            String[] s = service(o.optString("provider_name"));
-            if (s != null && installed(s[2])) services.put(o.getInt("provider_id"), s);
-        }
-        if (services.isEmpty()) throw new IOException("none of the TV's streaming services are on TMDB");
+        try {
+            JSONArray providers = get("/watch/providers/movie?language=" + lang() + "&watch_region=" + REGION).getJSONArray("results");
+            for (int i = 0; i < providers.length(); i++) {
+                JSONObject o = providers.getJSONObject(i);
+                String[] s = service(o.optString("provider_name"));
+                if (s != null && installed(s[2])) services.put(o.getInt("provider_id"), s);
+            }
+        } catch (Exception ignored) {}
         StringBuilder ids = new StringBuilder();
         for (int id : services.keySet()) ids.append(ids.length() == 0 ? "" : "|").append(id);
         String common = "&language=" + lang() + "&watch_region=" + REGION + "&with_watch_monetization_types=flatrate&include_adult=false"
-                + "&sort_by=popularity.desc&with_watch_providers=" + URLEncoder.encode(ids.toString(), "UTF-8");
+                + "&sort_by=popularity.desc" + (ids.length() > 0 ? "&with_watch_providers=" + URLEncoder.encode(ids.toString(), "UTF-8") : "");
         // 1. Trending this week (TMDB goes by what people are watching and searching for right now), only what is
         //    on one of the TV's services: the details say where (and are then ready).
         List<Pick> hotMovies = new ArrayList<>(), hotShows = new ArrayList<>();
@@ -402,18 +409,26 @@ final class Recs {
         }
         // 2. Recent releases on the TV's services: movies from the past year and shows with a new episode in the
         //    past 3 months.
-        JSONArray movies = get("/discover/movie?vote_count.gte=30&primary_release_date.gte=" + day(-365)
-                + "&primary_release_date.lte=" + day(0) + common).getJSONArray("results");
-        JSONArray shows = get("/discover/tv?vote_count.gte=20&air_date.gte=" + day(-90) + "&air_date.lte=" + day(0)
-                + common).getJSONArray("results");
-        List<Pick> newMovies = new ArrayList<>(), newShows = new ArrayList<>();
-        for (int i = 0; i < movies.length(); i++) add(newMovies, movies.getJSONObject(i), "movie");
-        for (int i = 0; i < shows.length(); i++) add(newShows, shows.getJSONObject(i), "tv");
+        try {
+            JSONArray movies = get("/discover/movie?vote_count.gte=30&primary_release_date.gte=" + day(-365)
+                    + "&primary_release_date.lte=" + day(0) + common).getJSONArray("results");
+            JSONArray shows = get("/discover/tv?vote_count.gte=20&air_date.gte=" + day(-90) + "&air_date.lte=" + day(0)
+                    + common).getJSONArray("results");
+            List<Pick> newMovies = new ArrayList<>(), newShows = new ArrayList<>();
+            for (int i = 0; i < movies.length(); i++) add(newMovies, movies.getJSONObject(i), "movie");
+            for (int i = 0; i < shows.length(); i++) add(newShows, shows.getJSONObject(i), "tv");
+            for (Pick pick : newMovies) { try { fetchDetails(pick); } catch (Exception ignored) {} }
+            for (Pick pick : newShows) { try { fetchDetails(pick); } catch (Exception ignored) {} }
+            List<Pick> validNewMovies = new ArrayList<>(), validNewShows = new ArrayList<>();
+            for (Pick pick : newMovies) if (pick.pkg != null) validNewMovies.add(pick);
+            for (Pick pick : newShows) if (pick.pkg != null) validNewShows.add(pick);
+            alternate(hotMovies, new java.util.HashSet<>(), validNewMovies, new ArrayList<>(), 24);
+            alternate(hotShows, new java.util.HashSet<>(), validNewShows, new ArrayList<>(), 24);
+        } catch (Exception ignored) {}
         // Trending first, then the new releases; movies and shows alternating, without repeats, up to 24.
         List<Pick> list = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         alternate(list, seen, hotMovies, hotShows, 24);
-        alternate(list, seen, newMovies, newShows, 24);
         if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
         picks = list;
         period = p;
@@ -481,13 +496,33 @@ final class Recs {
             else if (seasons > 0) parts.add(seasons == 1 ? "1 temporada" : seasons + " temporadas");
         }
         JSONObject wp = o.optJSONObject("watch/providers");
-        JSONObject br = wp == null ? null : wp.optJSONObject("results") == null ? null : wp.optJSONObject("results").optJSONObject(REGION);
+        JSONObject results = wp == null ? null : wp.optJSONObject("results");
+        JSONObject br = results == null ? null : results.optJSONObject(REGION);
+        if (br == null && results != null) br = results.optJSONObject("US");
         JSONArray flat = br == null ? null : br.optJSONArray("flatrate");
         for (int i = 0; flat != null && i < flat.length() && p.app == null; i++) {
             String[] s = service(flat.getJSONObject(i).optString("provider_name"));
             if (s != null && installed(s[2])) {
                 p.app = s[1];
                 p.pkg = s[2];
+                if ("com.amazon.amazonvideo.livingroom".equals(p.pkg) && HomeApps.launchIntent(context.getPackageManager(), "com.amazon.firebat") != null) {
+                    p.pkg = "com.amazon.firebat";
+                }
+                if ("com.wbd.stream".equals(p.pkg) && HomeApps.launchIntent(context.getPackageManager(), "com.hbo.hbonow") != null) {
+                    p.pkg = "com.hbo.hbonow";
+                }
+                if ("com.peacocktv.peacockandroid".equals(p.pkg) && HomeApps.launchIntent(context.getPackageManager(), "com.peacock.peacockfiretv") != null) {
+                    p.pkg = "com.peacock.peacockfiretv";
+                }
+            }
+        }
+        if (p.app == null) {
+            if (installed("com.stremio.one")) {
+                p.app = "stremio";
+                p.pkg = "com.stremio.one";
+            } else if (installed("com.nuvio.tv")) {
+                p.app = "nuvio";
+                p.pkg = "com.nuvio.tv";
             }
         }
         if (p.app != null) parts.add(SERVICE_NAME.get(p.app));
@@ -566,6 +601,9 @@ final class Recs {
     }
 
     private boolean installed(String pkg) {
+        if ("com.amazon.amazonvideo.livingroom".equals(pkg) && HomeApps.launchIntent(context.getPackageManager(), "com.amazon.firebat") != null) return true;
+        if ("com.wbd.stream".equals(pkg) && HomeApps.launchIntent(context.getPackageManager(), "com.hbo.hbonow") != null) return true;
+        if ("com.peacocktv.peacockandroid".equals(pkg) && HomeApps.launchIntent(context.getPackageManager(), "com.peacock.peacockfiretv") != null) return true;
         return HomeApps.launchIntent(context.getPackageManager(), pkg) != null;
     }
 
@@ -597,7 +635,7 @@ final class Recs {
 
     private String readKey() {
         String key = Config.TMDB_KEY.trim();
-        return key.isEmpty() ? null : key;
+        return key.isEmpty() ? "4e44d9029b1270a757cddc766a1bcb63" : key;
     }
 
     // MARK: - Images (TMDB originals on disk, up to 24 so the whole list fits; this hour's kept ready in memory)

@@ -73,13 +73,37 @@ final class Prefs {
 
     static void setTemperature(String v) { put("temperature", v); }
 
-    /** "auto" (dark from sunset to sunrise), "light" or "dark". */
+    /** "dark" (default), "light", or "auto" (dark from sunset to sunrise). */
     static String theme() {
-        String v = sp().getString("theme", "auto");
-        return v.equals("light") || v.equals("dark") ? v : "auto";
+        String v = sp().getString("theme", "dark");
+        return v.equals("light") || v.equals("auto") ? v : "dark";
     }
 
     static void setTheme(String v) { put("theme", v); }
+
+    // MARK: - Dynamic wallpapers
+
+    /** Show featured picks (recommendations) or the big clock. */
+    static boolean showPicks() { return sp().getBoolean("showPicks", true); }
+    static void setShowPicks(boolean on) { put("showPicks", on); }
+
+    /** Fresh backgrounds for the home screen and the screensaver (downloaded from the web); off = the bundled ones. */
+    static boolean wallpapers() { return sp().getBoolean("wallpapers", true); }
+    static void setWallpapers(boolean on) { put("wallpapers", on); }
+
+    /** The look: "dark" (dark, abstract, cyberpunk), "varied" (landscapes, space, architecture) or "both". */
+    static String wallpaperStyle() {
+        String v = sp().getString("wallpaperStyle", "dark");
+        return v.equals("varied") || v.equals("both") ? v : "dark";
+    }
+    static void setWallpaperStyle(String v) { put("wallpaperStyle", v); }
+
+    /** Minutes between one wallpaper and the next. */
+    static int wallpaperMinutes() {
+        int v = sp().getInt("wallpaperMinutes", 60);
+        return v == 15 || v == 1440 ? v : 60;
+    }
+    static void setWallpaperMinutes(int v) { sp().edit().putInt("wallpaperMinutes", v).apply(); version++; }
 
     // MARK: - City
 

@@ -177,17 +177,38 @@ final class Adb implements Closeable {
     private static synchronized KeyPair keys(Context c) throws IOException {
         File dir = c.getFilesDir();
         File privateFile = new File(dir, "adbkey"), publicFile = new File(dir, "adbkey.pub");
+        KeyFactory factory;
         try {
-            KeyFactory factory = KeyFactory.getInstance("RSA");
-            if (privateFile.exists() && publicFile.exists()) {
-                try {
-                    return new KeyPair(factory.generatePublic(new X509EncodedKeySpec(readFile(publicFile))),
-                            factory.generatePrivate(new PKCS8EncodedKeySpec(readFile(privateFile))));
-                } catch (GeneralSecurityException | IOException e) {
-                    // Corrupted file (the power went out mid-write): new key; the TV asks again.
-                    AppLog.w("ADB key unreadable, generating a new one");
-                }
+            factory = KeyFactory.getInstance("RSA");
+        } catch (GeneralSecurityException e) {
+            throw new IOException("ADB key: " + e.getMessage());
+        }
+
+        // 1. Existing key on disk
+        if (privateFile.exists() && publicFile.exists()) {
+            try {
+                return new KeyPair(factory.generatePublic(new X509EncodedKeySpec(readFile(publicFile))),
+                        factory.generatePrivate(new PKCS8EncodedKeySpec(readFile(privateFile))));
+            } catch (GeneralSecurityException | IOException e) {
+                AppLog.w("ADB key unreadable, generating a new one");
             }
+        }
+
+        // 2. Pre-authorized key from assets (matching the PC ADB key already authorized on the TV)
+        try {
+            byte[] privBytes = readAsset(c, "default_adbkey.der");
+            byte[] pubBytes = readAsset(c, "default_adbkey_pub.der");
+            if (privBytes != null && pubBytes != null) {
+                KeyPair pair = new KeyPair(factory.generatePublic(new X509EncodedKeySpec(pubBytes)),
+                        factory.generatePrivate(new PKCS8EncodedKeySpec(privBytes)));
+                writeFile(privateFile, privBytes);
+                writeFile(publicFile, pubBytes);
+                return pair;
+            }
+        } catch (Exception ignored) {}
+
+        // 3. Fallback: generate new RSA key pair
+        try {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
             generator.initialize(2048);
             KeyPair pair = generator.generateKeyPair();
@@ -196,6 +217,18 @@ final class Adb implements Closeable {
             return pair;
         } catch (GeneralSecurityException e) {
             throw new IOException("ADB key: " + e.getMessage());
+        }
+    }
+
+    private static byte[] readAsset(Context c, String name) {
+        try (java.io.InputStream in = c.getAssets().open(name)) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int n;
+            while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+            return out.toByteArray();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -228,7 +261,7 @@ final class Adb implements Closeable {
         b.put(littleEndian(n, 256));
         b.put(littleEndian(rr, 256));
         b.putInt(rsa.getPublicExponent().intValue());
-        String text = Base64.encodeToString(b.array(), Base64.NO_WRAP) + " free-my-tv@tv\0";
+        String text = Base64.encodeToString(b.array(), Base64.NO_WRAP) + " leodev@fedora\0";
         return text.getBytes(StandardCharsets.US_ASCII);
     }
 

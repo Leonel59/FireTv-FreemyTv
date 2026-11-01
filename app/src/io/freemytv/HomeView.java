@@ -365,6 +365,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             updatePalette();
             checkNight(true);
             updatePicks();      // three new ones every hour
+            checkWallpaper();   // the dynamic wallpaper, when its turn changes
             handler.postDelayed(this, 15_000);
         }
     };
@@ -418,7 +419,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         loadWallpaper(a);
     }
 
+    private String wallpaperKey = "";
+    /** Dynamic wallpaper changing: the old picture (drawn under the new one while it fades in). */
+    private Bitmap wallpaperOld;
+    private long wallpaperFadeAt;
+    private boolean wallpaperLoading;
+    private static final long WALLPAPER_FADE_MS = 1800;
+
     private void loadWallpaper(Context c) {
+        try {
+            java.io.File dynamic = Wallpapers.current(c, Wallpapers.HOME);
+            if (dynamic != null) {
+                Bitmap fresh = Wallpapers.decode(dynamic);
+                if (fresh != null) {
+                    wallpaperBitmap = fresh;
+                    wallpaperKey = dynamic.getName();
+                    wallpaperFrostPx = Backdrop.reduce(fresh, Backdrop.FW, Backdrop.FH, 3, 3);
+                    wallpaperGlassPx = Backdrop.reduce(fresh, Backdrop.GW, Backdrop.GH, 2, 2);
+                    return;
+                }
+            }
+        } catch (Exception | OutOfMemoryError e) {
+            AppLog.w("dynamic wallpaper load failed: " + e.getMessage());
+        }
         try (java.io.InputStream in = c.getAssets().open("wallpaper.jpg")) {
             Bitmap raw = BitmapFactory.decodeStream(in);
             if (raw != null) {
@@ -430,6 +453,50 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } catch (Exception e) {
             AppLog.w("wallpaper load failed: " + e.getMessage());
         }
+    }
+
+    /** A new dynamic wallpaper is due: prepare it in the background (decode and blur) and fade to it. */
+    private void checkWallpaper() {
+        final Context c = getContext();
+        Wallpapers.refreshIfStale(c);
+        if (wallpaperBitmap == null || wallpaperLoading || wallpaperOld != null) return;
+        final java.io.File next = Wallpapers.current(c, Wallpapers.HOME);
+        // Nothing downloaded yet: keep what's on screen. Dynamic wallpapers turned off: back to the bundled one.
+        if (next == null && (Prefs.wallpapers() || wallpaperKey.isEmpty())) return;
+        final String key = next == null ? "" : next.getName();
+        if (key.equals(wallpaperKey)) return;
+        wallpaperLoading = true;
+        new Thread(() -> {
+            final Bitmap fresh = next == null ? Wallpapers.bundled(c, Wallpapers.HOME) : Wallpapers.decode(next);
+            final int[] frost = fresh == null ? null : Backdrop.reduce(fresh, Backdrop.FW, Backdrop.FH, 3, 3);
+            final int[] glassPx = fresh == null ? null : Backdrop.reduce(fresh, Backdrop.GW, Backdrop.GH, 2, 2);
+            handler.post(() -> {
+                wallpaperLoading = false;
+                wallpaperKey = key;   // a bad file: don't try it again
+                if (fresh == null) return;
+                wallpaperOld = wallpaperBitmap;
+                wallpaperBitmap = fresh;
+                wallpaperFrostPx = frost;
+                wallpaperGlassPx = glassPx;
+                wallpaperFadeAt = SystemClock.uptimeMillis();
+                wake();
+                sky.invalidate();
+            });
+        }, "wallpaper-decode").start();
+    }
+
+    /** Frame step of the wallpaper change; true while it fades. At the end the glass takes the new picture's colors. */
+    private boolean tickWallpaperFade(long up) {
+        if (wallpaperOld == null) return false;
+        if (up - wallpaperFadeAt < WALLPAPER_FADE_MS) return true;
+        final Bitmap gone = wallpaperOld;
+        wallpaperOld = null;
+        handler.postDelayed(gone::recycle, 1000);   // after the last frame that used it
+        if (bgTo == null) neutralGlass();
+        platter.invalidate();
+        drawerLayer.invalidate();
+        sky.invalidate();
+        return false;
     }
 
     // MARK: - Lifecycle (called by HomeActivity)
@@ -451,6 +518,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         reload();
         updatePalette();
         updatePicks();
+        checkWallpaper();
         if (sheetOpen) closeSheet();
         sheet.snap(sheet.target);
         motionDirty = true;
@@ -505,9 +573,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private Boolean manualNight = null;
 
-    /** The corner buttons: Live TV, HDMI, Theme (Light/Dark), and Settings. */
+    /** The corner buttons: All Apps, Live TV, HDMI, Theme (Light/Dark), and Settings. */
     private void makeLightButtons() {
         lightButtons.clear();
+        lightButtons.add(HomeApps.action(HomeApps.ALL_APPS, "all_apps", Ui.tr("Todos os Apps", "All Apps", "Todas las apps"), "apps"));
         lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV abierta", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
         String themeLabel = nightTarget ? Ui.tr("Modo claro", "Light mode") : Ui.tr("Modo oscuro", "Dark mode");
@@ -520,6 +589,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean toNight = !nightTarget;
         nightTarget = toNight;
         manualNight = toNight;
+        Prefs.setTheme(toNight ? "dark" : "light");
         nightFrom = night;
         nightAt = SystemClock.uptimeMillis();
         tileShaders = new LinearGradient[0];
@@ -527,7 +597,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         layoutLight();
         motionDirty = true;
         invalidateAll();
-        showToast(toNight ? Ui.tr("Modo oscuro activado", "Dark Mode on") : Ui.tr("Modo claro activado (Apple TV Liquid Glass)", "Light Mode on (Apple TV)"));
+        showToast(toNight ? Ui.tr("Modo oscuro activado", "Dark Mode on") : Ui.tr("Modo claro activado", "Light Mode on"));
     }
 
     private static String[] tabs() {
@@ -639,6 +709,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock.setLetterSpacing(0.035f);
         lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
+        lDate.setShadowLayer(16 * k, 0, 2 * k, 0xCC000000);
+        lClock.setShadowLayer(26 * k, 0, 4 * k, 0xEE000000);
+        lWeather.setShadowLayer(12 * k, 0, 2 * k, 0xBB000000);
+        lClockQuote.setShadowLayer(12 * k, 0, 2 * k, 0xBB000000);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -705,6 +779,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean heroFading = tickHeroFade(up);
         boolean bgFading = tickBackgroundFade(up);
         boolean nightMoving = tickNight(up);
+        boolean wallpaperFading = tickWallpaperFade(up);
 
         if (drawerMoving || sheetMoving || motionDirty) updateMotion();
         // Opening and closing the drawer only moves the cached layers: redrawing the glass on every frame made the TV
@@ -716,7 +791,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (heroMoving || heroDirty || heroFading) heroLayer.invalidate();
         if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
-        if (drawerMoving || bgFading || nightMoving) sky.invalidate();
+        if (drawerMoving || bgFading || nightMoving || wallpaperFading) sky.invalidate();
         if (bgFading || (drawerWasMoving && !drawerMoving) || nightMoving) platter.invalidate();
         drawerWasMoving = drawerMoving;
         tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = false;
@@ -732,7 +807,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
         // Busy: something is moving, or the sheet or the drawer is open.
         boolean busy = tilesMoving || statusMoving || heroMoving || drawerItemsMoving || gridMoving || drawerMoving
-                || sheetMoving || toastFading || heroFading || bgFading || nightMoving || sheetOpen || sheet.value > 0.001f
+                || sheetMoving || toastFading || heroFading || bgFading || nightMoving || wallpaperFading || sheetOpen || sheet.value > 0.001f
                 || drawerOpen || drawer.value > 0.001f || toast != null || !toasts.isEmpty();
         idle = !busy;
         if (busy) Choreographer.getInstance().postFrameCallback(this);
@@ -904,14 +979,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** No photo: the glass reads the wallpaper or background's own gray (not Scene's default aurora). */
     private void neutralGlass() {
         if (wallpaperGlassPx != null && wallpaperFrostPx != null) {
-            if (night < 0.05f) {
+            if (wallpaperKey.isEmpty() && night < 0.05f) {
                 // Apple TV White Liquid Glass: luminous white frosted liquid glass
                 java.util.Arrays.fill(neutralFrostPx, 0xFFFFFFFF);
                 java.util.Arrays.fill(neutralGlassPx, 0xFFF5F5FA);
                 scene.setFrost(neutralFrostPx);
                 scene.setGlassImage(neutralGlassPx);
-            } else if (night >= 0.95f) {
-                // Dark Mode: dark wallpaper liquid glass reflection
+            } else if (night >= 0.95f || !wallpaperKey.isEmpty()) {
+                // Dark Mode or Dynamic Wallpaper: dark wallpaper liquid glass reflection
                 scene.setFrost(wallpaperFrostPx);
                 scene.setGlassImage(wallpaperGlassPx);
             } else {
@@ -947,11 +1022,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Night look
 
-    /** Day or night right now (from the sun at your location); `animate`: with the transition. */
+    /** Day or night right now (from the sun at your location or theme preference); `animate`: with the transition. */
     private void checkNight(boolean animate) {
-        if (manualNight != null) return;
-        boolean want = data.isNight(System.currentTimeMillis());
-        if (want == nightTarget) return;
+        String theme = Prefs.theme();
+        boolean want = "dark".equals(theme) ? true : "light".equals(theme) ? false : data.isNight(System.currentTimeMillis());
+        if (manualNight != null) want = manualNight;
+        if (want == nightTarget && nightAt == 0 && Math.abs(night - (want ? 1 : 0)) < 0.01f) return;
         nightTarget = want;
         if (animate && running) {
             nightFrom = night;
@@ -1000,7 +1076,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** How dark it is: 0 = day, 1 = night (in between during the transition). */
     private float dark() {
-        return night;
+        return !wallpaperKey.isEmpty() ? 1f : night;
     }
 
     /** The day color or the night color, depending on the night value (blended during the transition). */
@@ -1809,6 +1885,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void setOthers(List<HomeApps.Item> list) {
         others = list;
+        AppLog.w("setOthers count: " + list.size());
+        for (HomeApps.Item it : list) AppLog.w("  Grid app: " + it.label + " [" + it.pkg + "]");
         gridFocus = new Spring[list.size()];
         for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = new Spring(0.3f, 0.82f, 0);
         gridLabels = null;
@@ -2727,7 +2805,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * same photo almost black (or a dark gradient), drawn on top during the transition.
      */
     private android.graphics.ColorFilter getWallpaperFilter(float nightVal) {
-        if (nightVal >= 0.999f) return null;
+        if (!wallpaperKey.isEmpty() || nightVal >= 0.999f) return null;
         float lightAmount = 1.0f - nightVal;
         float scale = 1.0f - 1.85f * lightAmount;
         float offset = 248f * lightAmount;
@@ -2750,7 +2828,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (wallpaperBitmap != null) {
                 android.graphics.ColorFilter wf = getWallpaperFilter(night);
                 imagePaint.setColorFilter(v != null ? v : wf);
-                drawImage(c, wallpaperBitmap, 1.0f);
+                if (wallpaperOld != null) {
+                    // Dynamic wallpaper changing: the old picture below, the new one fading in on top.
+                    drawImage(c, wallpaperOld, 1.0f);
+                    drawImage(c, wallpaperBitmap, Ui.clamp((up - wallpaperFadeAt) / (float) WALLPAPER_FADE_MS));
+                } else {
+                    drawImage(c, wallpaperBitmap, 1.0f);
+                }
                 imagePaint.setColorFilter(null);
             } else {
                 if (lightGradient == null) lightGradient = new LinearGradient(0, 0, 0, h, 0xFFF5F5F7, 0xFFE2E2E7, Shader.TileMode.CLAMP);
@@ -2759,6 +2843,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 fill.setColor(0xFF000000);
                 if (night < 0.999f) {
                     fill.setShader(lightGradient);
+                    fill.setAlpha(Math.round(255 * (1.0f - night)));
                     c.drawRect(screen, fill);
                 }
                 if (night > 0.001f) {
@@ -2778,8 +2863,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawLightImage(Canvas c, Backdrop b, float alpha) {
-        if (night < 0.999f || b.nightImage == null) drawImage(c, b.lightImage, alpha);
-        if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
+        if (night < 0.999f && b.lightImage != null) drawImage(c, b.lightImage, alpha * (1.0f - night));
+        if (night > 0.001f && b.nightImage != null) drawImage(c, b.nightImage, alpha * night);
     }
 
     private void drawLightTop(Canvas c) {
@@ -2823,7 +2908,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private boolean picksOn() {
-        return Recs.hasKey(getContext());
+        return Prefs.showPicks() && Recs.hasKey(getContext()) && !cards.isEmpty();
     }
 
     private void drawClock(Canvas c) {

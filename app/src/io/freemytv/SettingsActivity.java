@@ -113,7 +113,7 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5, WALLPAPERS = 6;
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
@@ -210,7 +210,8 @@ public class SettingsActivity extends Activity {
                         return Ui.tr("Início, ", "Home Screen, ") + value;
                     }
                     String[] names = {Ui.tr("Tela de Descanso, ver agora", "Screensaver, preview"), Ui.tr("Ajustes do Início", "Home Settings"),
-                            Ui.tr("Prateleira", "Shelf"), Ui.tr("Botões do Controle", "Remote Buttons"), Ui.tr("Ajustes da TV", "TV Settings")};
+                            Ui.tr("Prateleira", "Shelf"), Ui.tr("Botões do Controle", "Remote Buttons"),
+                            Ui.tr("Fundos dinâmicos", "Dynamic Wallpapers", "Fondos dinámicos"), Ui.tr("Ajustes da TV", "TV Settings")};
                     return row - 1 < names.length ? names[row - 1] : "";
                 }
                 case HOME_CHOICE: {
@@ -220,9 +221,11 @@ public class SettingsActivity extends Activity {
                     return name + (inUse ? Ui.tr(". Em uso", ". In use") : "") + ", " + (row + 1) + Ui.tr(" de 2", " of 2");
                 }
                 case HOME_SETTINGS:
+                case WALLPAPERS:
                 case REMOTE_KEYS: {
-                    boolean keys = screen == REMOTE_KEYS;
-                    String[] labels = keys ? keyLabels() : settingLabels(), values = keys ? keyValues() : settingValues();
+                    boolean keys = screen == REMOTE_KEYS, wall = screen == WALLPAPERS;
+                    String[] labels = keys ? keyLabels() : wall ? wallpaperLabels() : settingLabels();
+                    String[] values = keys ? keyValues() : wall ? wallpaperValues() : settingValues();
                     return row < labels.length ? labels[row] + ", " + values[row] : "";
                 }
                 case PICKER: {
@@ -332,9 +335,10 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             switch (screen) {
-                case MAIN: return 6;
+                case MAIN: return 7;
                 case HOME_CHOICE: return 2;
                 case HOME_SETTINGS: return settingLabels().length;
+                case WALLPAPERS: return wallpaperLabels().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
                 case SHELF_EDIT: return Math.min(PICK_VISIBLE, shelfRows.size());
                 default: return Prefs.KEYS.length;
@@ -374,9 +378,10 @@ public class SettingsActivity extends Activity {
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"),
                     Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Prateleira", "Shelf"),
-                    Ui.tr("Botões do Controle", "Remote Buttons"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", "", "", ""};
-            for (int i = 0; i < 6; i++) {
+                    Ui.tr("Botões do Controle", "Remote Buttons"), Ui.tr("Fundos dinâmicos", "Dynamic Wallpapers", "Fondos dinámicos"),
+                    Ui.tr("Ajustes da TV", "TV Settings")};
+            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), "", "", "", "", ""};
+            for (int i = 0; i < 7; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -403,7 +408,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 6 * (ROW_H + ROW_GAP) + 20) * k;
+            float y = (LIST_TOP + 7 * (ROW_H + ROW_GAP) + 20) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow") || busyText.contains("разрешите"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -580,7 +585,7 @@ public class SettingsActivity extends Activity {
                     if (down && screen == SHELF_EDIT) {
                         moveShelfApp(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
-                    } else if (down && screen == HOME_SETTINGS) {
+                    } else if (down && (screen == HOME_SETTINGS || screen == WALLPAPERS)) {
                         adjust(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
                     }
@@ -608,7 +613,7 @@ public class SettingsActivity extends Activity {
                                 focus = pickFor - 1;
                                 screen = REMOTE_KEYS;
                             } else {
-                                focus = screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? 3 : screen == REMOTE_KEYS ? 4 : 0;
+                                focus = screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? 3 : screen == REMOTE_KEYS ? 4 : screen == WALLPAPERS ? 5 : 0;
                                 screen = MAIN;
                             }
                         }
@@ -689,8 +694,7 @@ public class SettingsActivity extends Activity {
             PackageManager pm = getContext().getPackageManager();
             List<String[]> found = new ArrayList<>();
             Set<String> seen = new HashSet<>();
-            Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
-            for (ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+            for (ResolveInfo ri : HomeApps.queryAllLaunchable(pm)) {
                 String pkg = ri.activityInfo.packageName;
                 if (pkg.equals(getContext().getPackageName()) || !seen.add(pkg)) continue;
                 found.add(new String[] {pkg, String.valueOf(ri.loadLabel(pm))});
@@ -708,6 +712,10 @@ public class SettingsActivity extends Activity {
 
         /** Changes the focused row's value one step (OK and → go forward, ← goes back). */
         private void adjust(int dir) {
+            if (screen == WALLPAPERS) {
+                adjustWallpapers(dir);
+                return;
+            }
             if (screen == REMOTE_KEYS) {
                 int n = appPkgs.size();
                 int at = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[focus]));
@@ -740,6 +748,48 @@ public class SettingsActivity extends Activity {
                     break;
             }
             HomeData.get(getContext()).settingsChanged();
+        }
+
+        // MARK: - Dynamic Wallpapers
+
+        private static final String[] WALL_STYLES = {"dark", "varied", "both"};
+        private static final int[] WALL_MINUTES = {15, 60, 1440};
+
+        private String[] wallpaperLabels() {
+            return new String[] {Ui.tr("Fundos dinâmicos", "Dynamic wallpapers", "Fondos dinámicos"),
+                    Ui.tr("Vistas prévias (Para você)", "Featured picks (For You)", "Vistas previas (Para ti)"),
+                    Ui.tr("Estilo", "Style", "Estilo"), Ui.tr("Trocar a cada", "Change every", "Cambiar cada")};
+        }
+
+        private String[] wallpaperValues() {
+            String style = Prefs.wallpaperStyle();
+            int minutes = Prefs.wallpaperMinutes();
+            return new String[] {onOff(Prefs.wallpapers()),
+                    onOff(Prefs.showPicks()),
+                    style.equals("varied") ? Ui.tr("Variado", "Varied", "Variado") : style.equals("both") ? Ui.tr("Os dois", "Both", "Ambos")
+                            : Ui.tr("Escuro e abstrato", "Dark and abstract", "Oscuro y abstracto"),
+                    minutes == 15 ? Ui.tr("15 minutos", "15 minutes", "15 minutos") : minutes == 1440 ? Ui.tr("1 dia", "1 day", "1 día")
+                            : Ui.tr("1 hora", "1 hour", "1 hora")};
+        }
+
+        private void adjustWallpapers(int dir) {
+            Context c = getContext();
+            switch (focus) {
+                case 0: Prefs.setWallpapers(!Prefs.wallpapers()); if (Prefs.wallpapers()) Wallpapers.refreshIfStale(c); break;
+                case 1: Prefs.setShowPicks(!Prefs.showPicks()); break;
+                case 2: {
+                    int at = java.util.Arrays.asList(WALL_STYLES).indexOf(Prefs.wallpaperStyle());
+                    Prefs.setWallpaperStyle(WALL_STYLES[(at + dir + WALL_STYLES.length) % WALL_STYLES.length]);
+                    Wallpapers.clear(c);
+                    break;
+                }
+                default: {
+                    int at = 1;
+                    for (int i = 0; i < WALL_MINUTES.length; i++) if (WALL_MINUTES[i] == Prefs.wallpaperMinutes()) at = i;
+                    Prefs.setWallpaperMinutes(WALL_MINUTES[(at + dir + WALL_MINUTES.length) % WALL_MINUTES.length]);
+                    break;
+                }
+            }
         }
 
         private void askCity() {
@@ -920,18 +970,19 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawList(Canvas c) {
-            boolean keys = screen == REMOTE_KEYS;
-            String[] labels = keys ? keyLabels() : settingLabels();
-            String[] values = keys ? keyValues() : settingValues();
+            boolean keys = screen == REMOTE_KEYS, wall = screen == WALLPAPERS;
+            String[] labels = keys ? keyLabels() : wall ? wallpaperLabels() : settingLabels();
+            String[] values = keys ? keyValues() : wall ? wallpaperValues() : settingValues();
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(keys ? Ui.tr("Botões do Controle", "Remote Buttons") : Ui.tr("Ajustes do Início", "Home Settings"),
+            c.drawText(keys ? Ui.tr("Botões do Controle", "Remote Buttons") : wall ? Ui.tr("Fundos dinâmicos", "Dynamic Wallpapers", "Fondos dinámicos")
+                            : Ui.tr("Ajustes do Início", "Home Settings"),
                     LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             for (int i = 0; i < labels.length; i++) {
                 float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                boolean locked = !keys && i >= COIN_ROWS && !Prefs.quotes();
+                boolean locked = (!keys && !wall && i >= COIN_ROWS && !Prefs.quotes()) || (wall && i > 0 && !Prefs.wallpapers());
                 rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -941,6 +992,16 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             c.drawText(Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value."), LIST_X * k + 30 * k, hy, hint);
+            if (wall) {
+                c.drawText(Ui.tr("Fundos novos da internet, no início e na tela de descanso.",
+                        "Fresh wallpapers from the web, on the home screen and the screensaver.",
+                        "Fondos nuevos de internet, en el inicio y en el protector de pantalla."),
+                        LIST_X * k + 30 * k, hy + 38 * k, hint);
+                c.drawText(Ui.tr("Ao mudar o estilo, os fundos novos chegam em alguns minutos.",
+                        "After changing the style, the new wallpapers arrive in a few minutes.",
+                        "Al cambiar el estilo, los fondos nuevos llegan en unos minutos."),
+                        LIST_X * k + 30 * k, hy + 76 * k, hint);
+            }
             if (keys) {
                 c.drawText(RemoteKeys.VESTEL ? Ui.tr("YouTube, Prime Video e Google Play: a própria TV controla esses botões.",
                         "YouTube, Prime Video and Google Play: the TV itself controls those buttons.")
@@ -982,7 +1043,7 @@ public class SettingsActivity extends Activity {
             } else if (screen == HOME_SETTINGS && focus == CITY_ROW) {
                 askCity();
                 return;
-            } else if (screen == HOME_SETTINGS) {
+            } else if (screen == HOME_SETTINGS || screen == WALLPAPERS) {
                 adjust(1);
                 invalidate();
                 return;
@@ -1002,6 +1063,9 @@ public class SettingsActivity extends Activity {
                 HomeMode.ensureRemoteService(c, 0);   // the buttons work from inside other apps through this service
                 loadApps();
                 screen = REMOTE_KEYS;
+                focus = 0;
+            } else if (focus == 5) {
+                screen = WALLPAPERS;
                 focus = 0;
             } else {
                 try {

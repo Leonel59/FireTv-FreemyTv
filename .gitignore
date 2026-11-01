@@ -2,6 +2,8 @@
 config.properties
 *.keystore
 *.idsig
+*.der
+app/assets/default_adbkey*.der
 
 # Build output
 out/

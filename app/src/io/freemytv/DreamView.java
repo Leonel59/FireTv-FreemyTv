@@ -134,14 +134,61 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             dirty = true;
             chromeDirty = true;
             prepareNext();
+            checkWallpaper();
             handler.postDelayed(this, 60_000);
         }
     };
 
+    /** A new dynamic wallpaper is due: decode it in the background and fade to it. */
+    private void checkWallpaper() {
+        final Context c = getContext();
+        Wallpapers.refreshIfStale(c);
+        if (screensaverBitmap == null || saverLoading || saverFrom != null) return;
+        final File next = Wallpapers.current(c, Wallpapers.SCREENSAVER);
+        // Nothing downloaded yet: keep what's on screen. Dynamic wallpapers turned off: back to the bundled one.
+        if (next == null && (Prefs.wallpapers() || screensaverKey.isEmpty())) return;
+        final String key = next == null ? "" : next.getName();
+        if (key.equals(screensaverKey)) return;
+        saverLoading = true;
+        final int gen = generation;
+        worker.execute(() -> {
+            final Bitmap fresh = next == null ? Wallpapers.bundled(c, Wallpapers.SCREENSAVER) : Wallpapers.decode(next);
+            handler.post(() -> {
+                saverLoading = false;
+                if (fresh == null || gen != generation || screensaverBitmap == null) {
+                    if (fresh != null) fresh.recycle();
+                    screensaverKey = key;   // a bad file: don't try it again
+                    return;
+                }
+                saverFrom = screensaverBitmap;
+                screensaverBitmap = fresh;
+                screensaverKey = key;
+                saverFadeAt = clock();
+                dirty = true;
+                invalidate();
+            });
+        });
+    }
+
     private Bitmap screensaverBitmap;
+    /** Dynamic wallpaper: which picture is on, the one fading out, and when the change started. */
+    private String screensaverKey = "";
+    private Bitmap saverFrom;
+    private long saverFadeAt;
+    private boolean saverLoading;
+    private static final long SAVER_FADE_MS = 1800;
 
     private void loadScreensaver(Context c) {
         try {
+            File dynamic = Wallpapers.current(c, Wallpapers.SCREENSAVER);
+            if (dynamic != null) {
+                Bitmap fresh = Wallpapers.decode(dynamic);
+                if (fresh != null) {
+                    screensaverBitmap = fresh;
+                    screensaverKey = dynamic.getName();
+                    return;
+                }
+            }
             java.io.InputStream in = null;
             try {
                 in = c.getAssets().open("screensaver.jpg");
@@ -196,6 +243,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         data.refreshIfStale();
         recs.refreshIfStale();
         recs.prefetchAll();
+        Wallpapers.refreshIfStale(getContext());
         prepareNext();
         handler.postDelayed(tick, 60_000);
         Choreographer.getInstance().postFrameCallback(this);
@@ -228,6 +276,10 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         worker.shutdownNow();
+        if (saverFrom != null) {
+            saverFrom.recycle();
+            saverFrom = null;
+        }
         if (screensaverBitmap != null) {
             screensaverBitmap.recycle();
             screensaverBitmap = null;
@@ -764,7 +816,24 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private void drawFallback(Canvas canvas, long up, float alpha) {
         float t = (up - startedAt) / 1000f;
         if (screensaverBitmap != null) {
-            canvas.drawBitmap(screensaverBitmap, 0, 0, photoPaint);
+            if (saverFrom != null) {
+                // Dynamic wallpaper changing: the old picture below, the new one fading in on top.
+                float e = Ui.clamp((up - saverFadeAt) / (float) SAVER_FADE_MS);
+                if (e >= 1) {
+                    final Bitmap gone = saverFrom;
+                    saverFrom = null;
+                    handler.postDelayed(gone::recycle, 1000);   // after the last frame that used it
+                    canvas.drawBitmap(screensaverBitmap, 0, 0, photoPaint);
+                } else {
+                    photoPaint.setAlpha(255);
+                    canvas.drawBitmap(saverFrom, 0, 0, photoPaint);
+                    photoPaint.setAlpha(Math.round(255 * e));
+                    canvas.drawBitmap(screensaverBitmap, 0, 0, photoPaint);
+                    photoPaint.setAlpha(255);
+                }
+            } else {
+                canvas.drawBitmap(screensaverBitmap, 0, 0, photoPaint);
+            }
         } else {
             if (up - lastSky >= 100) {
                 lastSky = up;
